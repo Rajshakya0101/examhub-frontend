@@ -133,7 +133,7 @@ export default function TopBar() {
           </Box>
 
           {/* Navigation Links - Desktop */}
-          {!isMobile && (
+          {!isMobile && user && (
             <Stack direction="row" spacing={1} sx={{ flexGrow: 1 }}>
               {navItems.map((item) => (
                 <Button 
@@ -168,7 +168,7 @@ export default function TopBar() {
               }
             }}
           >
-            {navItems.map((item) => (
+            {user && navItems.map((item) => (
               <MenuItem 
                 key={item.path} 
                 component={RouterLink} 
@@ -181,6 +181,17 @@ export default function TopBar() {
                 <Typography>{item.label}</Typography>
               </MenuItem>
             ))}
+            {!user && (
+              <MenuItem 
+                component={RouterLink} 
+                to="/signin" 
+                onClick={handleCloseMobileMenu}
+                sx={{ py: 1.5 }}
+              >
+                <Box sx={{ mr: 2, color: 'primary.main' }}><AccountCircleIcon /></Box>
+                <Typography>Sign In</Typography>
+              </MenuItem>
+            )}
           </Menu>
 
           {/* Right side: Theme toggle and user menu */}

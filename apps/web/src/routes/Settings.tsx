@@ -24,7 +24,9 @@ import {
   TextField,
   Alert,
   Stack,
-  Snackbar
+  Snackbar,
+  useTheme,
+  alpha
 } from '@mui/material';
 import { 
   Notifications as NotificationsIcon,
@@ -42,6 +44,7 @@ import { useNavigate } from 'react-router-dom';
 export default function Settings() {
   const navigate = useNavigate();
   const user = useAuthState();
+  const theme = useTheme();
   const { themePreference, setThemePreference } = useThemeStore();
   const [notifications, setNotifications] = useState(true);
   const [sounds, setSounds] = useState(true);
@@ -138,51 +141,160 @@ export default function Settings() {
 
   return (
     <Container>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+      <Box 
+        sx={{ 
+          mb: 4,
+          background: theme => `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.05)}, ${alpha(theme.palette.secondary.main, 0.05)})`,
+          p: 3,
+          borderRadius: 2,
+        }}
+      >
+        <Typography variant="h4" component="h1" sx={{ 
+          fontWeight: 800,
+          background: theme => `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+        }}>
           Settings
         </Typography>
-        <Typography variant="subtitle1" color="text.secondary">
+        <Typography variant="subtitle1" color="text.secondary" sx={{ mt: 1 }}>
           Customize your experience and manage your account
         </Typography>
       </Box>
       
       {/* Appearance Settings */}
-      <Paper sx={{ mb: 4, p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
+      <Paper 
+        elevation={2}
+        sx={{ 
+          mb: 4, 
+          p: 3,
+          borderRadius: '16px',
+          background: theme => theme.palette.mode === 'light'
+            ? 'linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,1))'
+            : 'linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(30,30,30,1))',
+          backdropFilter: 'blur(8px)',
+          border: theme => `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+        }}
+      >
+        <Typography variant="h6" sx={{ 
+          mb: 2,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          '&::before': {
+            content: '""',
+            width: 4,
+            height: 20,
+            bgcolor: 'primary.main',
+            borderRadius: 1,
+            display: 'inline-block',
+          }
+        }}>
           Appearance
         </Typography>
         
         <Box sx={{ pl: 2 }}>
           <FormControl component="fieldset">
-            <Typography variant="subtitle2" gutterBottom>
+            <Typography variant="subtitle2" gutterBottom sx={{ color: 'text.secondary', ml: 1 }}>
               Theme
             </Typography>
             <RadioGroup
               value={themePreference}
               onChange={handleThemeChange}
             >
-              <FormControlLabel value="light" control={<Radio />} label="Light" />
-              <FormControlLabel value="dark" control={<Radio />} label="Dark" />
-              <FormControlLabel value="system" control={<Radio />} label="System (follow device settings)" />
+              {[
+                { value: 'light', label: 'Light', icon: '☀️' },
+                { value: 'dark', label: 'Dark', icon: '🌙' },
+                { value: 'system', label: 'System (follow device settings)', icon: '⚙️' }
+              ].map((option) => (
+                <FormControlLabel
+                  key={option.value}
+                  value={option.value}
+                  control={
+                    <Radio 
+                      sx={{
+                        '&.Mui-checked': {
+                          color: 'primary.main',
+                        }
+                      }}
+                    />
+                  }
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <span>{option.icon}</span>
+                      <Typography>{option.label}</Typography>
+                    </Box>
+                  }
+                  sx={{
+                    m: 0.5,
+                    p: 1,
+                    borderRadius: 1,
+                    width: '100%',
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      bgcolor: theme => alpha(theme.palette.primary.main, 0.08),
+                    },
+                  }}
+                />
+              ))}
             </RadioGroup>
           </FormControl>
         </Box>
       </Paper>
       
       {/* Notification Settings */}
-      <Paper sx={{ mb: 4, p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
+      <Paper 
+        elevation={2}
+        sx={{ 
+          mb: 4, 
+          p: 3,
+          borderRadius: '16px',
+          background: theme => theme.palette.mode === 'light'
+            ? 'linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,1))'
+            : 'linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(30,30,30,1))',
+          backdropFilter: 'blur(8px)',
+          border: theme => `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+        }}
+      >
+        <Typography variant="h6" sx={{ 
+          mb: 2,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          '&::before': {
+            content: '""',
+            width: 4,
+            height: 20,
+            bgcolor: 'primary.main',
+            borderRadius: 1,
+            display: 'inline-block',
+          }
+        }}>
           Notifications & Sound
         </Typography>
         
         <List disablePadding>
-          <ListItem>
+          <ListItem
+            sx={{
+              borderRadius: 2,
+              transition: 'all 0.2s',
+              '&:hover': {
+                bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+              },
+              mb: 1,
+            }}
+          >
             <ListItemIcon>
-              <NotificationsIcon />
+              <NotificationsIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Push Notifications" 
+              primary={
+                <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                  Push Notifications
+                </Typography>
+              }
               secondary="Receive notifications for test reminders, new features, and results"
             />
             <ListItemSecondaryAction>
@@ -190,18 +302,38 @@ export default function Settings() {
                 edge="end"
                 checked={notifications}
                 onChange={handleNotificationsToggle}
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: 'primary.main',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: 'primary.main',
+                  },
+                }}
               />
             </ListItemSecondaryAction>
           </ListItem>
           
           <Divider variant="inset" component="li" />
           
-          <ListItem>
+          <ListItem
+            sx={{
+              borderRadius: 2,
+              transition: 'all 0.2s',
+              '&:hover': {
+                bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+              },
+            }}
+          >
             <ListItemIcon>
-              <SoundIcon />
+              <SoundIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Sound Effects" 
+              primary={
+                <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                  Sound Effects
+                </Typography>
+              }
               secondary="Play sounds for test completion, countdown timers, etc."
             />
             <ListItemSecondaryAction>
@@ -209,6 +341,14 @@ export default function Settings() {
                 edge="end"
                 checked={sounds}
                 onChange={handleSoundsToggle}
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: 'primary.main',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: 'primary.main',
+                  },
+                }}
               />
             </ListItemSecondaryAction>
           </ListItem>
@@ -216,42 +356,115 @@ export default function Settings() {
       </Paper>
       
       {/* Privacy & Security Settings */}
-      <Paper sx={{ mb: 4, p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
+      <Paper 
+        elevation={2}
+        sx={{ 
+          mb: 4, 
+          p: 3,
+          borderRadius: '16px',
+          background: theme => theme.palette.mode === 'light'
+            ? 'linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,1))'
+            : 'linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(30,30,30,1))',
+          backdropFilter: 'blur(8px)',
+          border: theme => `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+        }}
+      >
+        <Typography variant="h6" sx={{ 
+          mb: 2,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          '&::before': {
+            content: '""',
+            width: 4,
+            height: 20,
+            bgcolor: 'primary.main',
+            borderRadius: 1,
+            display: 'inline-block',
+          }
+        }}>
           Privacy & Security
         </Typography>
         
         <List disablePadding>
-          <ListItem button onClick={handleExportData}>
+          <ListItem 
+            button 
+            onClick={handleExportData}
+            sx={{
+              borderRadius: 2,
+              transition: 'all 0.2s',
+              '&:hover': {
+                bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+                transform: 'translateX(4px)',
+              },
+              mb: 1,
+            }}
+          >
             <ListItemIcon>
-              <DownloadIcon />
+              <DownloadIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Export My Data" 
+              primary={
+                <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                  Export My Data
+                </Typography>
+              }
               secondary="Download a copy of your personal data"
             />
           </ListItem>
           
           <Divider variant="inset" component="li" />
           
-          <ListItem button onClick={() => navigate('/privacy')}>
+          <ListItem 
+            button 
+            onClick={() => navigate('/privacy')}
+            sx={{
+              borderRadius: 2,
+              transition: 'all 0.2s',
+              '&:hover': {
+                bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+                transform: 'translateX(4px)',
+              },
+              mb: 1,
+            }}
+          >
             <ListItemIcon>
-              <PrivacyIcon />
+              <PrivacyIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Privacy Policy" 
+              primary={
+                <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                  Privacy Policy
+                </Typography>
+              }
               secondary="Review our privacy policy"
             />
           </ListItem>
           
           <Divider variant="inset" component="li" />
           
-          <ListItem button onClick={() => navigate('/terms')}>
+          <ListItem 
+            button 
+            onClick={() => navigate('/terms')}
+            sx={{
+              borderRadius: 2,
+              transition: 'all 0.2s',
+              '&:hover': {
+                bgcolor: theme => alpha(theme.palette.primary.main, 0.05),
+                transform: 'translateX(4px)',
+              },
+            }}
+          >
             <ListItemIcon>
-              <SecurityIcon />
+              <SecurityIcon color="primary" />
             </ListItemIcon>
             <ListItemText 
-              primary="Terms of Service" 
+              primary={
+                <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                  Terms of Service
+                </Typography>
+              }
               secondary="Review our terms of service"
             />
           </ListItem>
@@ -259,8 +472,34 @@ export default function Settings() {
       </Paper>
       
       {/* Account Actions */}
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
+      <Paper 
+        elevation={2}
+        sx={{ 
+          p: 3,
+          borderRadius: '16px',
+          background: theme => theme.palette.mode === 'light'
+            ? 'linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,1))'
+            : 'linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(30,30,30,1))',
+          backdropFilter: 'blur(8px)',
+          border: theme => `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+        }}
+      >
+        <Typography variant="h6" sx={{ 
+          mb: 2,
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          color: theme => theme.palette.error.main,
+          '&::before': {
+            content: '""',
+            width: 4,
+            height: 20,
+            bgcolor: 'error.main',
+            borderRadius: 1,
+            display: 'inline-block',
+          }
+        }}>
           Account Actions
         </Typography>
         
@@ -271,6 +510,15 @@ export default function Settings() {
             startIcon={<LogoutIcon />}
             onClick={handleSignOut}
             fullWidth
+            sx={{
+              borderWidth: 2,
+              py: 1.5,
+              '&:hover': {
+                borderWidth: 2,
+                transform: 'translateY(-2px)',
+                boxShadow: theme => theme.shadows[4],
+              }
+            }}
           >
             Sign Out
           </Button>
@@ -281,23 +529,75 @@ export default function Settings() {
             startIcon={<DeleteIcon />}
             onClick={() => setDeleteAccountDialog(true)}
             fullWidth
+            sx={{
+              borderWidth: 2,
+              py: 1.5,
+              '&:hover': {
+                borderWidth: 2,
+                transform: 'translateY(-2px)',
+                boxShadow: theme => theme.shadows[4],
+              }
+            }}
           >
             Delete My Account
           </Button>
         </Stack>
         
-        <Box sx={{ mt: 2 }}>
-          <Alert severity="info">
-            Account email: {user?.email}
+        <Box sx={{ mt: 3 }}>
+          <Alert 
+            severity="info"
+            sx={{
+              borderRadius: 2,
+              '& .MuiAlert-icon': {
+                color: 'primary.main',
+              }
+            }}
+          >
+            <Typography variant="subtitle2">
+              Account email: <Box component="span" sx={{ fontWeight: 600 }}>{user?.email}</Box>
+            </Typography>
           </Alert>
         </Box>
       </Paper>
       
       {/* Delete Account Dialog */}
-      <Dialog open={deleteAccountDialog} onClose={() => setDeleteAccountDialog(false)}>
-        <DialogTitle>Delete Account</DialogTitle>
+      <Dialog 
+        open={deleteAccountDialog} 
+        onClose={() => setDeleteAccountDialog(false)}
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+            backgroundImage: 'none',
+            background: theme => theme.palette.mode === 'light'
+              ? 'linear-gradient(to bottom, rgba(255,255,255,0.95), rgba(255,255,255,1))'
+              : 'linear-gradient(to bottom, rgba(30,30,30,0.95), rgba(30,30,30,1))',
+            backdropFilter: 'blur(8px)',
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          pb: 1,
+          '& .MuiTypography-root': {
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            color: 'error.main',
+            fontWeight: 600,
+          }
+        }}>
+          <DeleteIcon color="error" />
+          Delete Account
+        </DialogTitle>
         <DialogContent>
-          <DialogContentText sx={{ mb: 2 }}>
+          <DialogContentText sx={{ 
+            mb: 3,
+            p: 2,
+            borderRadius: 2,
+            bgcolor: theme => alpha(theme.palette.error.main, 0.1),
+            color: 'error.main',
+            border: '1px solid',
+            borderColor: 'error.main',
+          }}>
             Warning: This action cannot be undone. All your data, including test history and achievements, will be permanently deleted.
           </DialogContentText>
           <TextField
@@ -311,13 +611,49 @@ export default function Settings() {
             onChange={(e) => setPassword(e.target.value)}
             error={!!passwordError}
             helperText={passwordError}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+                '&.Mui-focused': {
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'error.main',
+                    borderWidth: 2,
+                  },
+                },
+              },
+            }}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteAccountDialog(false)} color="primary">
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button 
+            onClick={() => setDeleteAccountDialog(false)} 
+            sx={{
+              px: 3,
+              py: 1,
+              borderRadius: 2,
+            }}
+          >
             Cancel
           </Button>
-          <Button onClick={handleDeleteAccount} color="error" disabled={!password}>
+          <Button 
+            onClick={handleDeleteAccount} 
+            color="error" 
+            variant="contained"
+            disabled={!password}
+            sx={{
+              px: 3,
+              py: 1,
+              borderRadius: 2,
+              '&:not(:disabled)': {
+                background: theme => `linear-gradient(45deg, ${theme.palette.error.dark}, ${theme.palette.error.main})`,
+                boxShadow: theme => theme.shadows[2],
+                '&:hover': {
+                  transform: 'translateY(-1px)',
+                  boxShadow: theme => theme.shadows[4],
+                },
+              },
+            }}
+          >
             Delete Permanently
           </Button>
         </DialogActions>
@@ -328,8 +664,33 @@ export default function Settings() {
         open={snackbar.open}
         autoHideDuration={5000}
         onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-        message={snackbar.message}
-      />
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{
+          '& .MuiSnackbarContent-root': {
+            borderRadius: 2,
+            backgroundImage: 'none',
+            background: theme => theme.palette.mode === 'light'
+              ? 'linear-gradient(to right, rgba(255,255,255,0.95), rgba(255,255,255,0.98))'
+              : 'linear-gradient(to right, rgba(30,30,30,0.95), rgba(30,30,30,0.98))',
+            backdropFilter: 'blur(8px)',
+            border: theme => `1px solid ${alpha(theme.palette.primary.main, 0.2)}`,
+            boxShadow: theme => theme.shadows[3],
+          }
+        }}
+      >
+        <Alert
+          severity={snackbar.severity as 'success' | 'error'}
+          sx={{
+            width: '100%',
+            alignItems: 'center',
+            '& .MuiAlert-icon': {
+              fontSize: '1.5rem',
+            }
+          }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 }

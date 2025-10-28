@@ -22,7 +22,9 @@ import {
   CircularProgress,
   Alert,
   Badge,
-  LinearProgress
+  LinearProgress,
+  useTheme,
+  alpha
 } from '@mui/material';
 import { 
   Edit as EditIcon, 
@@ -87,6 +89,7 @@ export default function Profile() {
     education: 'B.Com, Mumbai University',
   });
   const [error, setError] = useState('');
+  const theme = useTheme();
   
   // Query for user stats (using mock data for now)
   const { data: userStats } = useQuery({
@@ -168,16 +171,51 @@ export default function Profile() {
       <Grid container spacing={4}>
         {/* Left column - Profile Info */}
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3, mb: 4 }}>
+          <Paper 
+        elevation={3}
+        sx={{ 
+          p: 3, 
+          mb: 4,
+          background: theme.palette.mode === 'light'
+            ? 'linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,1))'
+            : 'linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(30,30,30,1))',
+          backdropFilter: 'blur(8px)',
+          border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+          borderRadius: '16px',
+        }}
+      >
             {/* Profile Header */}
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
+            <Box sx={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              alignItems: 'center', 
+              mb: 3,
+              position: 'relative',
+              '&::before': {
+                content: '""',
+                position: 'absolute',
+                top: -24,
+                left: -24,
+                right: -24,
+                height: 270,
+                background: `linear-gradient(135deg, ${alpha(theme.palette.primary.main, 0.1)}, ${alpha(theme.palette.secondary.main, 0.1)})`,
+                borderRadius: '30px 30px 100% 100%',
+                zIndex: 0,
+              }
+            }}>
               <Badge
                 overlap="circular"
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 badgeContent={
                   editing ? (
-                    <Avatar sx={{ width: 22, height: 22, bgcolor: 'primary.main' }}>
-                      <EditIcon sx={{ fontSize: 12 }} />
+                    <Avatar sx={{ 
+                      width: 32, 
+                      height: 32, 
+                      bgcolor: 'primary.main',
+                      boxShadow: theme.shadows[3],
+                      border: `2px solid ${theme.palette.background.paper}`,
+                    }}>
+                      <EditIcon sx={{ fontSize: 16 }} />
                     </Avatar>
                   ) : null
                 }
@@ -185,7 +223,16 @@ export default function Profile() {
                 <Avatar 
                   src={user?.photoURL || undefined} 
                   alt={editedProfile.displayName}
-                  sx={{ width: 100, height: 100, mb: 2 }}
+                  sx={{ 
+                    width: 120, 
+                    height: 120, 
+                    mb: 2,
+                    boxShadow: theme.shadows[5],
+                    border: `4px solid ${theme.palette.background.paper}`,
+                    backgroundColor: theme.palette.primary.main,
+                    fontSize: '3rem',
+                    zIndex: 1,
+                  }}
                 >
                   {editedProfile.displayName?.charAt(0) || '?'}
                 </Avatar>
@@ -343,6 +390,14 @@ export default function Profile() {
                       startIcon={<CancelIcon />}
                       onClick={handleCancelEdit}
                       disabled={saving}
+                      sx={{
+                        borderWidth: 2,
+                        '&:hover': {
+                          borderWidth: 2,
+                          transform: 'translateY(-2px)',
+                          boxShadow: theme.shadows[4],
+                        }
+                      }}
                     >
                       Cancel
                     </Button>
@@ -352,11 +407,23 @@ export default function Profile() {
                       variant="contained" 
                       color="primary" 
                       fullWidth
-                      startIcon={saving ? <CircularProgress size={24} /> : <SaveIcon />}
+                      startIcon={saving ? (
+                        <CircularProgress size={20} thickness={4} sx={{ color: 'inherit' }} />
+                      ) : (
+                        <SaveIcon />
+                      )}
                       onClick={handleSaveProfile}
                       disabled={saving}
+                      sx={{
+                        fontWeight: 600,
+                        boxShadow: theme.shadows[2],
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: theme.shadows[4],
+                        }
+                      }}
                     >
-                      Save
+                      {saving ? 'Saving...' : 'Save Changes'}
                     </Button>
                   </Grid>
                 </Grid>
@@ -367,6 +434,16 @@ export default function Profile() {
                   fullWidth
                   startIcon={<EditIcon />}
                   onClick={handleEditProfile}
+                  sx={{
+                    borderWidth: 2,
+                    fontWeight: 600,
+                    '&:hover': {
+                      borderWidth: 2,
+                      transform: 'translateY(-2px)',
+                      boxShadow: theme.shadows[3],
+                      bgcolor: alpha(theme.palette.primary.main, 0.1),
+                    }
+                  }}
                 >
                   Edit Profile
                 </Button>
@@ -418,28 +495,76 @@ export default function Profile() {
 
         {/* Right column - Stats, History, Achievements */}
         <Grid item xs={12} md={8}>
-          <Paper sx={{ mb: 3 }}>
+            <Paper 
+              elevation={2}
+              sx={{ 
+                mb: 3,
+                borderRadius: '16px',
+                overflow: 'hidden',
+                background: theme.palette.mode === 'light'
+                  ? 'linear-gradient(to bottom, rgba(255,255,255,0.9), rgba(255,255,255,1))'
+                  : 'linear-gradient(to bottom, rgba(30,30,30,0.9), rgba(30,30,30,1))',
+                backdropFilter: 'blur(8px)',
+                border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+              }}
+            >
             <Tabs
               value={activeTab}
               onChange={(_, newValue) => setActiveTab(newValue)}
               variant="fullWidth"
+              sx={{
+                '& .MuiTab-root': {
+                  minHeight: 56,
+                  fontWeight: 600,
+                  fontSize: '0.95rem',
+                  textTransform: 'none',
+                  '&.Mui-selected': {
+                    color: theme.palette.primary.main,
+                  },
+                },
+                '& .MuiTabs-indicator': {
+                  height: 3,
+                  borderRadius: '3px 3px 0 0',
+                  backgroundColor: theme.palette.primary.main,
+                },
+              }}
             >
               <Tab label="Statistics" />
               <Tab label="Test History" />
               <Tab label="Achievements" />
-            </Tabs>
-            
-            <Box sx={{ p: 3 }}>
+            </Tabs>            <Box sx={{ p: 3 }}>
               {/* Statistics Tab */}
               {activeTab === 0 && (
                 <Grid container spacing={3}>
                   <Grid item xs={12} sm={6} md={4}>
-                    <Card>
-                      <CardContent>
-                        <Typography color="text.secondary" gutterBottom>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: theme.palette.mode === 'light'
+                          ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
+                          : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ height: '100%', p: 3 }}>
+                        <Typography color="text.secondary" variant="subtitle2" gutterBottom sx={{ fontWeight: 500 }}>
                           Average Score
                         </Typography>
-                        <Typography variant="h5" component="div">
+                        <Typography 
+                          variant="h4" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.primary.main,
+                            mt: 1
+                          }}
+                        >
                           {userStats.averageScore}%
                         </Typography>
                       </CardContent>
@@ -573,6 +698,21 @@ export default function Profile() {
                           height: '100%',
                           opacity: achievement.earned ? 1 : 0.7,
                           position: 'relative',
+                          background: theme.palette.mode === 'light'
+                            ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
+                            : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
+                          backdropFilter: 'blur(8px)',
+                          border: achievement.earned 
+                            ? `2px solid ${alpha(theme.palette.primary.main, 0.3)}`
+                            : `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                          transition: 'all 0.3s ease-in-out',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: theme.shadows[8],
+                            borderColor: achievement.earned 
+                              ? alpha(theme.palette.primary.main, 0.5)
+                              : alpha(theme.palette.divider, 0.2),
+                          },
                         }}
                       >
                         {achievement.earned && (

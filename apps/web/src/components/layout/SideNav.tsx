@@ -29,8 +29,8 @@ export default function SideNav() {
     { label: 'Leaderboard', path: '/leaderboard', icon: <EmojiEventsIcon /> },
   ];
 
-  // Only show mobile bottom navigation on mobile devices
-  if (!isMobile) {
+  // Only show mobile bottom navigation on mobile devices and when user is logged in
+  if (!isMobile || !user) {
     return null;
   }
 

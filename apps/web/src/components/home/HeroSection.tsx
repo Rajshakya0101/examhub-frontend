@@ -196,7 +196,7 @@ export default function HeroSection() {
               sx={{ 
                 width: '100%',
                 height: 'auto',
-                filter: theme.palette.mode === 'dark' ? 'brightness(0.8)' : 'none',
+                filter: theme.palette.mode === 'dark' ? 'brightness(0.)' : 'none',
               }}
             />
           </Grid>
