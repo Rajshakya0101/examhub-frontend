@@ -1,0 +1,59 @@
+# Allow read access to live questions only
+# Allow users to create and manage their own attempts
+# Prevent client writes to scores and leaderboards
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId);
+    }
+
+    match /exams/{examId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /questions/{qid} {
+      allow read: if resource.data.status == 'live';
+      allow write: if false;
+    }
+
+    match /attempts/{attemptId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isOwner(request.resource.data.userId);
+      allow update: if isOwner(resource.data.userId)
+        && !request.resource.data.diff().affectedKeys()
+          .hasAny(['score']);
+    }
+
+    match /attempt_items/{attemptId}/items/{qid} {
+      allow read: if isOwner(get(/databases/$(database)/documents/attempts/$(attemptId)).data.userId);
+      allow write: if isOwner(get(/databases/$(database)/documents/attempts/$(attemptId)).data.userId)
+        && request.resource.data.keys().hasOnly(['selectedIdx', 'timeSpentMs']);
+    }
+
+    match /leaderboards/{scopeId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /daily_quiz/{date} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /content/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

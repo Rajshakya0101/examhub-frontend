@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firebase Configuration Test</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 40px; line-height: 1.6; }
+    pre { background: #f4f4f4; border-left: 3px solid #4285f4; padding: 10px 15px; overflow: auto; }
+    .success { color: green; font-weight: bold; }
+    .error { color: red; font-weight: bold; }
+    button { padding: 10px 15px; background: #4285f4; color: white; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #3367d6; }
+    #logs { margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <h1>Firebase Configuration Test</h1>
+  <p>This page tests your Firebase configuration and shows any errors.</p>
+  
+  <button id="testBtn">Test Firebase Configuration</button>
+  
+  <div id="logs"></div>
+
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js';
+    import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js';
+    import { getFirestore, collection, getDocs } from 'https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js';
+    
+    // Log helper function
+    function log(message, isError = false) {
+      const logs = document.getElementById('logs');
+      const logEntry = document.createElement('div');
+      logEntry.className = isError ? 'error' : 'success';
+      logEntry.textContent = message;
+      logs.appendChild(logEntry);
+    }
+    
+    // JSON pretty print
+    function prettyPrint(obj) {
+      const logs = document.getElementById('logs');
+      const pre = document.createElement('pre');
+      pre.textContent = JSON.stringify(obj, null, 2);
+      logs.appendChild(pre);
+    }
+    
+    async function testFirebase() {
+      document.getElementById('logs').innerHTML = '';
+      log('Starting Firebase configuration test...');
+      
+      try {
+        // These values should match your .env.local file
+        const firebaseConfig = {
+          apiKey: "AIzaSyDRC4d5o4hZ9Xa_sjaoznxGxqPWXPfpN0M",
+          authDomain: "examify-ac050.firebaseapp.com",
+          projectId: "examify-ac050",
+          storageBucket: "examify-ac050.appspot.com",
+          messagingSenderId: "1043573938723",
+          appId: "1:1043573938723:web:da1b8e3fabd49ca3526f96",
+          databaseURL: "https://examify-ac050-default-rtdb.firebaseio.com"
+        };
+        
+        log('Using configuration:');
+        const sanitizedConfig = {...firebaseConfig, apiKey: '[API KEY HIDDEN]'};
+        prettyPrint(sanitizedConfig);
+        
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        log('✅ Firebase app initialized successfully');
+        
+        // Test Authentication
+        try {
+          const auth = getAuth(app);
+          log('Firebase Auth initialized');
+          
+          await signInAnonymously(auth);
+          log('✅ Firebase Auth anonymous sign-in successful');
+        } catch (authError) {
+          log(`❌ Firebase Auth error: ${authError.code} - ${authError.message}`, true);
+          
+          // Special handling for configuration not found
+          if (authError.code === 'auth/configuration-not-found') {
+            log('The "configuration-not-found" error typically means:', true);
+            log('1. Your Firebase project may not have Authentication enabled', true);
+            log('2. The API key may be incorrect or restricted', true);
+            log('3. Your domain may not be authorized in Firebase Console', true);
+          }
+        }
+        
+        // Test Firestore
+        try {
+          const db = getFirestore(app);
+          log('Firestore initialized');
+          
+          await getDocs(collection(db, 'test'));
+          log('✅ Firebase Firestore query successful');
+        } catch (firestoreError) {
+          if (firestoreError.code === 'permission-denied') {
+            log('✅ Firebase Firestore connection successful (access denied due to security rules)');
+          } else {
+            log(`❌ Firebase Firestore error: ${firestoreError.code} - ${firestoreError.message}`, true);
+          }
+        }
+        
+      } catch (error) {
+        log(`❌ Firebase initialization failed: ${error.message}`, true);
+        console.error('Full error:', error);
+      }
+    }
+    
+    // Add click handler
+    document.getElementById('testBtn').addEventListener('click', testFirebase);
+  </script>
+</body>
+</html>

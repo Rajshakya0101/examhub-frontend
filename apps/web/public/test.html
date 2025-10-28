@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MUI Test</title>
+</head>
+<body>
+  <script type="module">
+    // This script checks if we can access the local server
+    async function checkServer() {
+      try {
+        const response = await fetch('http://localhost:3000/');
+        if (response.ok) {
+          document.body.innerHTML = '<h1>Success! The application is loading correctly.</h1><p>Your dev server is running properly.</p>';
+        } else {
+          document.body.innerHTML = `<h1>Error</h1><p>Got status: ${response.status}</p>`;
+        }
+      } catch (error) {
+        document.body.innerHTML = `<h1>Error connecting to dev server</h1><p>${error.message}</p>`;
+      }
+    }
+    
+    checkServer();
+  </script>
+</body>
+</html>

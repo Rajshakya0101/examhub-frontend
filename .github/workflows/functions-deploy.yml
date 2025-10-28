@@ -1,0 +1,75 @@
+name: Deploy Firebase Functions
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'firebase/functions/**'
+      - '.github/workflows/functions-deploy.yml'
+  workflow_dispatch:
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./firebase/functions
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: './firebase/functions/package-lock.json'
+    
+    - name: Install dependencies
+      run: npm ci
+    
+    - name: Lint
+      run: npm run lint
+    
+    - name: Build
+      run: npm run build
+
+    - name: Sync Types to Frontend
+      run: npm run sync-types
+      
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: lib
+        path: ./firebase/functions/lib
+
+  deploy:
+    needs: build_and_test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Download Build Artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: lib
+        path: ./firebase/functions/lib
+    
+    - name: Use Node.js 20.x
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: './firebase/functions/package-lock.json'
+    
+    - name: Install dependencies
+      run: cd firebase/functions && npm ci --production
+    
+    - name: Deploy to Firebase
+      uses: w9jds/firebase-action@master
+      with:
+        args: deploy --only functions
+      env:
+        FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+        GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
