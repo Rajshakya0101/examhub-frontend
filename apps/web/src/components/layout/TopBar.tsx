@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link as RouterLink, useLocation } from 'react-router-dom';
+import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
   Avatar,
@@ -32,6 +32,7 @@ export default function TopBar() {
   const user = useAuthState();
   const theme = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
@@ -55,13 +56,14 @@ export default function TopBar() {
   const handleSignOut = () => {
     signOut();
     handleCloseMenu();
+    navigate('/');
   };
   
   // Navigation items with icons
   const navItems = [
     { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon fontSize="small" /> },
     { label: 'Practice', path: '/practice', icon: <SchoolIcon fontSize="small" /> },
-    { label: 'Tests', path: '/tests', icon: <AssignmentIcon fontSize="small" /> },
+    { label: 'AI Mock Tests', path: '/tests', icon: <AssignmentIcon fontSize="small" /> },
     { label: 'Leaderboard', path: '/leaderboard', icon: <EmojiEventsIcon fontSize="small" /> },
   ];
 
@@ -154,6 +156,8 @@ export default function TopBar() {
               ))}
             </Stack>
           )}
+
+          {/* Mock Test Buttons removed - accessible via Tests page */}
 
           {/* Mobile Navigation Menu */}
           <Menu

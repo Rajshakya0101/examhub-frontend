@@ -9,6 +9,7 @@ import useStore from './store/useStore';
 import Layout from './components/layout/Layout';
 import FirebaseAuthErrorHandler from './components/common/FirebaseAuthErrorHandler';
 import { AuthProvider } from './lib/authContext';
+import { GuestProvider } from './lib/guestContext';
 import { NotificationProvider } from './lib/notifications/notificationContext';
 import SessionTimeoutHandler from './components/common/SessionTimeoutHandler';
 
@@ -18,6 +19,9 @@ import SignIn from './routes/SignIn';
 import Dashboard from './routes/Dashboard';
 import Practice from './routes/Practice';
 import Tests from './routes/Tests';
+import QuizCategories from './routes/QuizCategories';
+import StudyContent from './routes/StudyContent';
+import CurrentAffairs from './routes/CurrentAffairs';
 import CreateTest from './routes/CreateTest';
 import Attempt from './routes/Attempt';
 import Analysis from './routes/Analysis';
@@ -25,6 +29,12 @@ import Leaderboard from './routes/Leaderboard';
 import Profile from './routes/Profile';
 import Settings from './routes/Settings';
 import NotFound from './routes/NotFound';
+import QuickQuiz from './routes/QuickQuiz';
+import QuickQuizPlayer from './routes/QuickQuizPlayer';
+import FullMock from './routes/FullMock';
+import SectionalMock from './routes/SectionalMock';
+import TopicWiseMock from './routes/TopicWiseMock';
+import FirestoreTest from './routes/FirestoreTest';
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -52,11 +62,35 @@ const router = createBrowserRouter([
   },
   {
     path: '/practice',
-    element: <Layout><Practice /></Layout>,
+    element: <Layout allowGuest><Practice /></Layout>,
+  },
+  {
+    path: '/quizzes',
+    element: <Layout allowGuest><QuizCategories /></Layout>,
+  },
+  {
+    path: '/study-content',
+    element: <Layout allowGuest><StudyContent /></Layout>,
+  },
+  {
+    path: '/current-affairs',
+    element: <Layout allowGuest><CurrentAffairs /></Layout>,
   },
   {
     path: '/tests',
-    element: <Layout><Tests /></Layout>,
+    element: <Layout allowGuest><Tests /></Layout>,
+  },
+  {
+    path: '/tests/full-mock',
+    element: <Layout requireAuth={false}><FullMock /></Layout>,
+  },
+  {
+    path: '/tests/sectional-mock',
+    element: <Layout requireAuth={false}><SectionalMock /></Layout>,
+  },
+  {
+    path: '/tests/topic-wise-mock',
+    element: <Layout requireAuth={false}><TopicWiseMock /></Layout>,
   },
   {
     path: '/tests/create',
@@ -64,7 +98,7 @@ const router = createBrowserRouter([
   },
   {
     path: '/tests/:examId/attempt/:attemptId',
-    element: <Layout><Attempt /></Layout>,
+    element: <Layout allowGuest><Attempt /></Layout>,
   },
   {
     path: '/analysis/:attemptId',
@@ -72,7 +106,27 @@ const router = createBrowserRouter([
   },
   {
     path: '/leaderboard',
-    element: <Layout><Leaderboard /></Layout>,
+    element: <Layout allowGuest><Leaderboard /></Layout>,
+  },
+  {
+    path: '/quick-quiz',
+    element: <Layout requireAuth={false}><QuickQuiz /></Layout>,
+  },
+  {
+    path: '/quick-quiz/:quizId',
+    element: <Layout requireAuth={false}><QuickQuizPlayer /></Layout>,
+  },
+  {
+    path: '/full-mock',
+    element: <Layout requireAuth={false}><FullMock /></Layout>,
+  },
+  {
+    path: '/sectional-mock',
+    element: <Layout requireAuth={false}><SectionalMock /></Layout>,
+  },
+  {
+    path: '/topic-wise-mock',
+    element: <Layout requireAuth={false}><TopicWiseMock /></Layout>,
   },
   {
     path: '/profile',
@@ -81,6 +135,10 @@ const router = createBrowserRouter([
   {
     path: '/settings',
     element: <Layout><Settings /></Layout>,
+  },
+  {
+    path: '/firestore-test',
+    element: <Layout requireAuth={false}><FirestoreTest /></Layout>,
   },
   {
     path: '*',
@@ -111,12 +169,14 @@ export default function App() {
         <ThemeProvider theme={theme}>
           <CssBaseline />
           <AuthProvider>
-            <NotificationProvider>
-              <FirebaseAuthErrorHandler>
-                <SessionTimeoutHandler />
-                <RouterProvider router={router} />
-              </FirebaseAuthErrorHandler>
-            </NotificationProvider>
+            <GuestProvider>
+              <NotificationProvider>
+                <FirebaseAuthErrorHandler>
+                  <SessionTimeoutHandler />
+                  <RouterProvider router={router} />
+                </FirebaseAuthErrorHandler>
+              </NotificationProvider>
+            </GuestProvider>
           </AuthProvider>
         </ThemeProvider>
       </QueryClientProvider>

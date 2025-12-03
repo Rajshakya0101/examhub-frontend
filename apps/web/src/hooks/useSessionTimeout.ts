@@ -34,8 +34,14 @@ export default function useSessionTimeout(
     setSessionExpired(false);
 
     // Clear existing timers
-    if (warningTimer) clearTimeout(warningTimer);
-    if (expirationTimer) clearTimeout(expirationTimer);
+    if (warningTimer) {
+      clearTimeout(warningTimer);
+      setWarningTimer(null);
+    }
+    if (expirationTimer) {
+      clearTimeout(expirationTimer);
+      setExpirationTimer(null);
+    }
 
     // Set new timers
     const newWarningTimer = setTimeout(() => {
@@ -48,17 +54,18 @@ export default function useSessionTimeout(
 
     setWarningTimer(newWarningTimer);
     setExpirationTimer(newExpirationTimer);
-  }, [timeout, warningTime, warningTimer, expirationTimer]);
+  }, [timeout, warningTime]);
 
   // Track user activity to reset session timeout
   useEffect(() => {
-    // Initialize timers on first load
-    resetTimers();
-
-    // Event handler for user activity
     const handleUserActivity = () => {
-      resetTimers();
+      if (!sessionExpired) {
+        resetTimers();
+      }
     };
+
+    // Initialize timers on first load
+    handleUserActivity();
 
     // Add event listeners for user activity
     events.forEach(event => {
@@ -71,10 +78,14 @@ export default function useSessionTimeout(
         window.removeEventListener(event, handleUserActivity);
       });
       
-      if (warningTimer) clearTimeout(warningTimer);
-      if (expirationTimer) clearTimeout(expirationTimer);
+      if (warningTimer) {
+        clearTimeout(warningTimer);
+      }
+      if (expirationTimer) {
+        clearTimeout(expirationTimer);
+      }
     };
-  }, [resetTimers, events]);
+  }, [resetTimers, sessionExpired]);
 
   // Manually extend the session
   const extendSession = useCallback(() => {

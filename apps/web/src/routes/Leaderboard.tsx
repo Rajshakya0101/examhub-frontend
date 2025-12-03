@@ -29,7 +29,6 @@ import {
   Card,
   CardContent,
   useTheme,
-  Tooltip,
   IconButton,
   Divider,
   styled,
@@ -37,8 +36,9 @@ import {
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthState } from '@/lib/auth';
-import { useLeaderboard } from '@/lib/functions';
-import type { LeaderboardEntry } from '@/lib/models';
+import { useLeaderboard, useUserRank, useTopPerformers } from '@/hooks/useLeaderboard';
+import { useUserStatsSummary } from '@/hooks/useUserStats';
+import type { LeaderboardEntry } from '@/lib/firestore';
 import {
   EmojiEvents as EmojiEventsIcon,
   Whatshot as WhatshotIcon,
@@ -57,11 +57,18 @@ import {
 } from '@mui/icons-material';
 
 // Extended LeaderboardEntry with isCurrentUser flag for UI
-interface ExtendedLeaderboardEntry extends LeaderboardEntry {
+interface ExtendedLeaderboardEntry extends Partial<LeaderboardEntry> {
   isCurrentUser: boolean;
   // For simplicity in UI rendering
   badge: string;
   name: string;
+  id?: string;
+  rank: number;
+  displayName: string;
+  score?: number;
+  streak?: number;
+  testsCompleted: number;
+  accuracy: number;
 }
 
 // Mock data for leaderboard entries - will be replaced with actual data from backend
@@ -236,7 +243,7 @@ const timePeriods = [
 ];
 
 // Styled rank container for top 3 positions
-const RankContainer = styled(Box)(({ theme }) => ({
+const RankContainer = styled(Box)(() => ({
   width: 40,
   height: 40,
   display: 'flex',
@@ -320,32 +327,43 @@ export default function Leaderboard() {
   // Items per page for pagination
   const itemsPerPage = 10;
   
-  // Query to fetch leaderboard data from backend
-  const { data: backendLeaderboardData } = useLeaderboard(
-    activeTab === 0 ? undefined : category !== 'all' ? category : undefined
-  );
+  // Determine leaderboard type based on time period
+  const leaderboardType: 'global' | 'weekly' | 'monthly' = 
+    timePeriod === 'this_week' ? 'weekly' :
+    timePeriod === 'this_month' ? 'monthly' : 'global';
+  
+  // Fetch leaderboard data from Firebase
+  const { entries: firebaseEntries, isLoading: loadingLeaderboard } = useLeaderboard(leaderboardType, 100);
+  
+  // Get current user's rank
+  const { rank: userRank } = useUserRank(leaderboardType);
+  
+  // Get top 3 performers
+  const { topThree: topPerformers } = useTopPerformers(leaderboardType);
+  
+  // Get current user's real stats
+  const { summary, isLoading: statsLoading } = useUserStatsSummary();
   
   // Query for processing and displaying leaderboard data
   const { data: leaderboardData, isLoading } = useQuery({
-    queryKey: ['leaderboard-ui', activeTab, category, timePeriod, page, searchTerm, backendLeaderboardData],
+    queryKey: ['leaderboard-ui', activeTab, category, timePeriod, page, searchTerm, firebaseEntries],
     queryFn: async () => {
-      // In development, we use mock data
-      // In production, we'd use the backendLeaderboardData
-      let sourceData: ExtendedLeaderboardEntry[] = backendLeaderboardData?.entries as ExtendedLeaderboardEntry[] || mockLeaderboard;
-      
-      // Mark current user
-      if (user) {
-        sourceData = sourceData.map((entry: ExtendedLeaderboardEntry) => ({
-          ...entry,
-          isCurrentUser: entry.id === user.uid
-        }));
-      }
+      // Use real Firebase data
+      let sourceData = firebaseEntries.map(entry => ({
+        ...entry,
+        isCurrentUser: entry.userId === user?.uid,
+        badge: entry.badges[0]?.level || 'bronze',
+        name: entry.displayName,
+        streak: entry.currentStreak,
+        score: entry.totalScore,
+        id: entry.userId,
+      }));
       
       let filtered = [...sourceData];
       
       // Apply search filter if provided
       if (searchTerm) {
-        filtered = filtered.filter((entry: ExtendedLeaderboardEntry) => 
+        filtered = filtered.filter((entry) => 
           entry.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
           entry.displayName.toLowerCase().includes(searchTerm.toLowerCase())
         );
@@ -353,13 +371,13 @@ export default function Leaderboard() {
       
       // For "My Stats" tab, filter to show only the current user
       if (activeTab === 2) {
-        filtered = filtered.filter((entry: ExtendedLeaderboardEntry) => entry.isCurrentUser);
+        filtered = filtered.filter((entry) => entry.isCurrentUser);
       }
       
       // For "Friends" tab, in a real app we would filter by friends
       // For now, just show top 5 ranks as mock "friends"
       if (activeTab === 1) {
-        filtered = filtered.filter((entry: ExtendedLeaderboardEntry) => entry.rank <= 5 || entry.isCurrentUser);
+        filtered = filtered.filter((entry) => entry.rank <= 5 || entry.isCurrentUser);
       }
       
       // Calculate pagination
@@ -371,18 +389,18 @@ export default function Leaderboard() {
       );
       
       // Find current user's rank
-      const currentUser = sourceData.find((entry: ExtendedLeaderboardEntry) => entry.isCurrentUser);
+      const currentUser = sourceData.find((entry) => entry.isCurrentUser);
       
       return {
         entries: paginatedData,
         totalPages,
-        currentUserRank: currentUser?.rank || '-'
+        currentUserRank: currentUser?.rank || userRank || 1
       };
     },
     initialData: {
-      entries: mockLeaderboard.slice(0, itemsPerPage),
-      totalPages: Math.ceil(mockLeaderboard.length / itemsPerPage),
-      currentUserRank: mockLeaderboard.find(entry => entry.isCurrentUser)?.rank || '-'
+      entries: [],
+      totalPages: 1,
+      currentUserRank: 1
     }
   });
   
@@ -420,8 +438,9 @@ export default function Leaderboard() {
     setFiltersExpanded(prev => !prev);
   };
   
-  // Get current user data
-  const currentUserData = leaderboardData.entries.find(entry => entry.isCurrentUser) || mockLeaderboard.find(entry => entry.isCurrentUser);
+  // Get current user data from Firebase entries or fallback
+  const currentUserData = firebaseEntries.find(entry => entry.userId === user?.uid) || 
+                         leaderboardData.entries.find(entry => entry.isCurrentUser);
   
   // Format number with commas for thousands
   const formatNumber = (num: number) => {
@@ -510,7 +529,7 @@ export default function Leaderboard() {
                       fontWeight: 'bold',
                       color: 'secondary.main' 
                     }}>
-                      {currentUserData?.score || "0"}
+                      {currentUserData?.totalScore || 0}
                     </Typography>
                   </Box>
                 </Paper>
@@ -576,22 +595,20 @@ export default function Leaderboard() {
         </Box>
         
         {/* Top 3 Leaders Cards */}
-        {activeTab === 0 && leaderboardData.entries.some(entry => entry.rank <= 3) && (
+        {activeTab === 0 && topPerformers.length > 0 && (
           <Box sx={{ mb: 5 }}>
             <Typography variant="h5" sx={{ mb: 3, fontWeight: 600, px: 1 }}>
               Top Performers
             </Typography>
             
             <Grid container spacing={3}>
-              {leaderboardData.entries
-                .filter(entry => entry.rank <= 3)
-                .sort((a, b) => a.rank - b.rank)
-                .map((entry) => {
-                  const badgeInfo = getBadgeInfo(entry.badge, theme);
+              {topPerformers.map((entry) => {
+                  const badgeInfo = getBadgeInfo(entry.badges[0]?.level || 'bronze', theme);
                   const isTopRank = entry.rank === 1;
+                  const isCurrentUser = entry.userId === user?.uid;
                   
                   return (
-                    <Grid item xs={12} md={4} key={entry.id}>
+                    <Grid item xs={12} md={4} key={entry.userId}>
                       <Card sx={{ 
                         height: '100%',
                         borderRadius: 4,
@@ -641,21 +658,21 @@ export default function Leaderboard() {
                           }}>
                             <Avatar 
                               src={entry.photoURL} 
-                              alt={entry.name}
+                              alt={entry.displayName}
                               sx={{ 
                                 width: 90, 
                                 height: 90, 
                                 mb: 2,
-                                bgcolor: entry.isCurrentUser ? theme.palette.primary.main : badgeInfo.bgColor,
+                                bgcolor: isCurrentUser ? theme.palette.primary.main : badgeInfo.bgColor,
                                 border: isTopRank ? `3px solid ${theme.palette.warning.main}` : `2px solid ${badgeInfo.borderColor}`,
                               }}
                             >
-                              {entry.name.charAt(0)}
+                              {entry.displayName.charAt(0)}
                             </Avatar>
                             
                             <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
-                              {entry.name}
-                              {entry.isCurrentUser && (
+                              {entry.displayName}
+                              {isCurrentUser && (
                                 <Typography 
                                   variant="caption" 
                                   sx={{ 
@@ -674,7 +691,7 @@ export default function Leaderboard() {
                             </Typography>
                             
                             <Chip 
-                              label={entry.badge}
+                              label={entry.badges[0]?.level || 'Bronze'}
                               size="small"
                               icon={badgeInfo.icon}
                               sx={{ 
@@ -693,7 +710,7 @@ export default function Leaderboard() {
                               <Box sx={{ textAlign: 'center', p: 1 }}>
                                 <Typography variant="caption" color="text.secondary">Score</Typography>
                                 <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.primary.main }}>
-                                  {formatNumber(entry.score)}
+                                  {formatNumber(Math.round(entry.totalScore))}
                                 </Typography>
                               </Box>
                             </Grid>
@@ -723,7 +740,7 @@ export default function Leaderboard() {
                                   justifyContent: 'center',
                                   color: theme.palette.warning.main
                                 }}>
-                                  {entry.streak} {entry.streak > 0 && <WhatshotIcon sx={{ ml: 0.5, fontSize: 18 }} />}
+                                  {entry.currentStreak} {entry.currentStreak > 0 && <WhatshotIcon sx={{ ml: 0.5, fontSize: 18 }} />}
                                 </Typography>
                               </Box>
                             </Grid>
@@ -775,9 +792,19 @@ export default function Leaderboard() {
               </Tabs>
               
               {/* Filters */}
-              <Box sx={{ px: 3, py: 2, bgcolor: alpha(theme.palette.background.default, 0.4) }}>
+              <Box sx={{ 
+                px: 3, 
+                py: 2, 
+                bgcolor: alpha(theme.palette.background.paper, 0.85),
+                borderBottom: `1px solid ${alpha(theme.palette.divider, 0.1)}`
+              }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                  <Typography variant="subtitle1" sx={{ 
+                    fontWeight: 600, 
+                    display: 'flex', 
+                    alignItems: 'center',
+                    color: theme.palette.getContrastText(theme.palette.background.paper)
+                  }}>
                     <FilterListIcon fontSize="small" sx={{ mr: 1 }} />
                     Filters
                   </Typography>
@@ -839,21 +866,31 @@ export default function Leaderboard() {
               
               {/* Leaderboard Table */}
               <TableContainer sx={{ maxHeight: 600 }}>
-                {isLoading ? (
+                {isLoading || loadingLeaderboard ? (
                   <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
                     <CircularProgress />
                   </Box>
                 ) : (
                   <Table stickyHeader>
                     <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 600, width: '10%' }}>Rank</TableCell>
-                        <TableCell sx={{ fontWeight: 600, width: '30%' }}>Student</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 600, width: '15%' }}>Score</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 600, width: '10%' }}>Tests</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 600, width: '10%' }}>Accuracy</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 600, width: '10%' }}>Streak</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 600, width: '15%' }}>Badge</TableCell>
+                      <TableRow
+                        sx={{
+                          bgcolor: alpha(theme.palette.background.default, 0.5),
+                          '& th': {
+                            bgcolor: alpha(theme.palette.grey[200], 2), // more opaque background for better visibility
+                            color: theme.palette.text.primary, // use theme text color for contrast
+                            fontWeight: 600,
+                            borderBottom: `2px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                          }
+                        }}
+                      >
+                        <TableCell sx={{ width: '10%' }}>Rank</TableCell>
+                        <TableCell sx={{ width: '30%' }}>Student</TableCell>
+                        <TableCell align="center" sx={{ width: '15%' }}>Score</TableCell>
+                        <TableCell align="center" sx={{ width: '10%' }}>Tests</TableCell>
+                        <TableCell align="center" sx={{ width: '10%' }}>Accuracy</TableCell>
+                        <TableCell align="center" sx={{ width: '10%' }}>Streak</TableCell>
+                        <TableCell align="center" sx={{ width: '15%' }}>Badge</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -1069,7 +1106,7 @@ export default function Leaderboard() {
           {/* Sidebar */}
           <Grid item xs={12} md={4}>
             {/* User Stats Card - Shown only in My Stats tab or for sidebar */}
-            {currentUserData && (
+            {user && (
               <Card sx={{ 
                 mb: 4, 
                 borderRadius: 3, 
@@ -1100,8 +1137,8 @@ export default function Leaderboard() {
                   
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, pl: 1 }}>
                     <Avatar 
-                      src={currentUserData.photoURL} 
-                      alt={currentUserData.name}
+                      src={user.photoURL || ''} 
+                      alt={user.displayName || 'User'}
                       sx={{ 
                         width: 60, 
                         height: 60, 
@@ -1109,11 +1146,11 @@ export default function Leaderboard() {
                         bgcolor: theme.palette.primary.main,
                       }}
                     >
-                      {currentUserData.name.charAt(0)}
+                      {(user.displayName || 'U').charAt(0)}
                     </Avatar>
                     <Box>
                       <Typography variant="body2" color="text.secondary">Welcome back,</Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>{currentUserData.name}</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>{user.displayName || 'User'}</Typography>
                     </Box>
                   </Box>
                   
@@ -1134,7 +1171,7 @@ export default function Leaderboard() {
                           justifyContent: 'center' 
                         }}>
                           <Typography variant="h5" sx={{ fontWeight: 700, color: theme.palette.primary.main }}>
-                            #{currentUserData.rank}
+                            #{userRank || '-'}
                           </Typography>
                         </Box>
                       </Paper>
@@ -1149,7 +1186,7 @@ export default function Leaderboard() {
                       }}>
                         <Typography variant="caption" color="text.secondary">Score</Typography>
                         <Typography variant="h5" sx={{ fontWeight: 700, color: theme.palette.secondary.main }}>
-                          {formatNumber(currentUserData.score)}
+                          {statsLoading ? '-' : (currentUserData?.totalScore || 0)}
                         </Typography>
                       </Paper>
                     </Grid>
@@ -1163,7 +1200,7 @@ export default function Leaderboard() {
                       }}>
                         <Typography variant="caption" color="text.secondary">Tests Completed</Typography>
                         <Typography variant="h5" sx={{ fontWeight: 700, color: theme.palette.info.main }}>
-                          {currentUserData.testsCompleted}
+                          {statsLoading ? '-' : (summary?.testsCompleted || 0)}
                         </Typography>
                       </Paper>
                     </Grid>
@@ -1177,7 +1214,7 @@ export default function Leaderboard() {
                       }}>
                         <Typography variant="caption" color="text.secondary">Accuracy</Typography>
                         <Typography variant="h5" sx={{ fontWeight: 700, color: theme.palette.success.main }}>
-                          {currentUserData.accuracy}%
+                          {statsLoading ? '-' : (summary?.accuracy || 0)}%
                         </Typography>
                       </Paper>
                     </Grid>
@@ -1205,8 +1242,8 @@ export default function Leaderboard() {
                         display: 'flex',
                         alignItems: 'center' 
                       }}>
-                        {currentUserData.streak} days
-                        {currentUserData.streak > 0 && <WhatshotIcon sx={{ ml: 1, fontSize: 20 }} />}
+                        {statsLoading ? '-' : (summary?.streak || 0)} days
+                        {!statsLoading && summary?.streak > 0 && <WhatshotIcon sx={{ ml: 1, fontSize: 20 }} />}
                       </Typography>
                     </Box>
                   </Paper>

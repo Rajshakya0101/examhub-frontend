@@ -6,19 +6,34 @@ import { onSchedule } from 'firebase-functions/v2/scheduler';
 
 import { generateDailyQuiz } from './jobs/generateDailyQuiz';
 import { generatePaper } from './exams/generatePaper';
+import { generateQuiz } from './exams/generateQuiz';
+import { generateQuestionsByTopic } from './exams/generateQuestions';
 // Import scoreAttempt directly using require to bypass TypeScript path resolution issues
 const { scoreAttempt } = require('./exams/scoreAttempt');
 import { generatePDF } from './reports/generatePDF';
 import { updateLeaderboards } from './analytics/updateLeaderboards';
 import { analyzeAttempt } from './analytics/analyzeAttempt';
+import { recalculateAllLeaderboards } from './analytics/recalculateLeaderboards';
+import { aggregateDailyStats } from './analytics/aggregateDailyStats';
 import { generateUploadUrl } from './storage/generateUploadUrl';
 import { seedData } from './admin/seedData';
 import { processFeedback } from './feedback/processFeedback';
+import { generateExternalQuiz } from './quiz/generateExternalQuiz';
 
 // Default region for better latency in India
 const DEFAULT_REGION = 'asia-south1';
 
 // Callable Functions
+
+/**
+ * Generate a quick practice quiz with AI-powered questions
+ */
+export const generateGuestQuiz = onCall({
+  memory: '1GiB',
+  timeoutSeconds: 120,
+  region: DEFAULT_REGION,
+  cors: ['http://localhost:3000', 'https://your-production-domain.com']
+}, generateQuiz);
 
 /**
  * Generate a mock exam paper with AI-powered questions
@@ -27,7 +42,18 @@ export const generateExamPaper = onCall({
   memory: '1GiB',
   timeoutSeconds: 120,
   region: DEFAULT_REGION,
+  cors: ['http://localhost:3000', 'https://your-production-domain.com']
 }, generatePaper);
+
+/**
+ * Generate questions for a specific topic with AI
+ */
+export const generateQuestions = onCall({
+  memory: '1GiB',
+  timeoutSeconds: 120,
+  region: DEFAULT_REGION,
+  cors: ['http://localhost:3000', 'https://your-production-domain.com']
+}, generateQuestionsByTopic);
 
 /**
  * Score an exam attempt and calculate analytics
@@ -35,6 +61,7 @@ export const generateExamPaper = onCall({
 export const scoreExamAttempt = onCall({
   memory: '512MiB',
   region: DEFAULT_REGION,
+  cors: ['http://localhost:3000', 'https://your-production-domain.com']
 }, scoreAttempt);
 
 /**
@@ -44,6 +71,7 @@ export const generateAttemptReport = onCall({
   memory: '1GiB',
   timeoutSeconds: 120,
   region: DEFAULT_REGION,
+  cors: ['http://localhost:3000', 'https://your-production-domain.com']
 }, generatePDF);
 
 /**
@@ -52,6 +80,7 @@ export const generateAttemptReport = onCall({
 export const analyzeExamAttempt = onCall({
   memory: '512MiB',
   region: DEFAULT_REGION,
+  cors: ['http://localhost:3000', 'https://your-production-domain.com'],
 }, analyzeAttempt);
 
 /**
@@ -79,6 +108,16 @@ export const submitFeedback = onCall({
   region: DEFAULT_REGION,
 }, processFeedback);
 
+/**
+ * Proxy for external quiz API to avoid CORS issues
+ */
+export const proxyExternalQuiz = onCall({
+  memory: '512MiB',
+  timeoutSeconds: 120,
+  region: DEFAULT_REGION,
+  cors: ['http://localhost:3000', 'https://your-production-domain.com'],
+}, generateExternalQuiz);
+
 // Scheduled Jobs
 
 /**
@@ -97,6 +136,44 @@ export const dailyQuizScheduler = onSchedule({
     logger.info('Daily quiz generation completed successfully');
   } catch (error) {
     logger.error('Daily quiz generation failed:', error);
+  }
+});
+
+/**
+ * Recalculate leaderboard rankings and percentiles
+ * Runs every hour to keep rankings fresh
+ */
+export const leaderboardRecalculation = onSchedule({
+  schedule: '0 * * * *', // every hour at minute 0
+  timeZone: 'Asia/Kolkata',
+  memory: '1GiB',
+  timeoutSeconds: 540, // 9 minutes
+  region: DEFAULT_REGION,
+}, async (event) => {
+  try {
+    await recalculateAllLeaderboards();
+    logger.info('Leaderboard recalculation completed successfully');
+  } catch (error) {
+    logger.error('Leaderboard recalculation failed:', error);
+  }
+});
+
+/**
+ * Aggregate daily stats and generate summaries
+ * Runs every day at 1:00 AM to process previous day's data
+ */
+export const dailyStatsAggregation = onSchedule({
+  schedule: '0 1 * * *', // every day at 1:00 AM
+  timeZone: 'Asia/Kolkata',
+  memory: '1GiB',
+  timeoutSeconds: 540, // 9 minutes
+  region: DEFAULT_REGION,
+}, async (event) => {
+  try {
+    await aggregateDailyStats();
+    logger.info('Daily stats aggregation completed successfully');
+  } catch (error) {
+    logger.error('Daily stats aggregation failed:', error);
   }
 });
 

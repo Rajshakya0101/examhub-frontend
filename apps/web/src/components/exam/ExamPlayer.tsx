@@ -17,10 +17,16 @@ import {
   DialogTitle,
   DialogContent,
   DialogContentText,
-  DialogActions
+  DialogActions,
+  CircularProgress,
+  Alert,
+  Container
 } from '@mui/material';
 import { useTimerStore } from '@/lib/store';
-import { submitAttempt, saveAnswer } from '@/lib/firestore';
+import { submitAttempt, saveAnswer } from '@/lib/firestoreAttempts';
+import { doc, getDoc, collection, query, where, getDocs, addDoc, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useAuthState } from '@/lib/auth';
 
 // Types
 interface Question {
@@ -50,10 +56,10 @@ export default function ExamPlayer() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
+  const user = useAuthState();
   
   // Timer state from Zustand
   const { timeLeft, startTimer, pauseTimer } = useTimerStore();
-  // We're only using timeLeft, startTimer, and pauseTimer from the store
   
   // Local state
   const [isPaletteOpen, setIsPaletteOpen] = useState(!isMobile);
@@ -62,45 +68,96 @@ export default function ExamPlayer() {
   const [sections, setSections] = useState<string[]>([]);
   const [currentSection, setCurrentSection] = useState('');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [attemptDocId, setAttemptDocId] = useState<string | null>(null);
   
   // Get current question
   const currentQuestion = questions[currentQuestionIdx];
 
-  // Load questions and exam data
+  // Load questions and exam data from Firestore
   useEffect(() => {
     const loadExam = async () => {
+      if (!examId || !user) return;
+      
       setLoading(true);
+      setError(null);
       
       try {
-        // This would be replaced with actual API calls to Firebase
-        // Mock data for now
-        const mockQuestions = Array(20).fill(0).map((_, idx) => ({
-          id: `q${idx + 1}`,
-          section: idx < 10 ? 'General Knowledge' : 'Current Affairs',
-          stem: `This is question ${idx + 1}. What is the correct answer?`,
-          options: [
-            `Option A for question ${idx + 1}`,
-            `Option B for question ${idx + 1}`,
-            `Option C for question ${idx + 1}`,
-            `Option D for question ${idx + 1}`
-          ],
-          selectedIdx: null,
-          timeSpentMs: 0
-        }));
+        // Fetch test document
+        const testDoc = await getDoc(doc(db, 'tests', examId));
         
-        setQuestions(mockQuestions);
+        if (!testDoc.exists()) {
+          setError('Test not found');
+          return;
+        }
+        
+        const testData = testDoc.data();
+        const questionIds = testData.questionIds || [];
+        
+        if (questionIds.length === 0) {
+          setError('No questions found for this test');
+          return;
+        }
+        
+        // Fetch all questions
+        const questionsPromises = questionIds.map((qId: string) =>
+          getDoc(doc(db, 'questions', qId))
+        );
+        
+        const questionDocs = await Promise.all(questionsPromises);
+        
+        const loadedQuestions: QuestionWithAnswer[] = questionDocs
+          .filter(qDoc => qDoc.exists())
+          .map(qDoc => {
+            const qData = qDoc.data();
+            return {
+              id: qDoc.id,
+              section: qData.topic || 'General',
+              stem: qData.stem || qData.question || 'Question not available',
+              options: qData.options || [],
+              correctIndex: qData.correctIndex,
+              selectedIdx: null,
+              timeSpentMs: 0
+            };
+          });
+        
+        if (loadedQuestions.length === 0) {
+          setError('No valid questions found');
+          return;
+        }
+        
+        setQuestions(loadedQuestions);
         
         // Extract unique sections
-        const uniqueSections = [...new Set(mockQuestions.map(q => q.section))];
+        const uniqueSections = [...new Set(loadedQuestions.map(q => q.section))];
         setSections(uniqueSections);
         setCurrentSection(uniqueSections[0]);
         
-        // Start timer with 30 minutes
-        startTimer(30 * 60);
+        // Create attempt document if new attempt
+        if (attemptId === 'new') {
+          const attemptData = {
+            testId: examId,
+            userId: user.uid,
+            startedAt: Timestamp.now(),
+            status: 'in-progress',
+            answers: {},
+            timeSpent: 0
+          };
+          
+          const attemptRef = await addDoc(collection(db, 'attempts'), attemptData);
+          setAttemptDocId(attemptRef.id);
+        } else {
+          setAttemptDocId(attemptId || null);
+        }
+        
+        // Start timer with test duration (convert minutes to seconds)
+        const duration = testData.durationMinutes || 60;
+        startTimer(duration * 60);
         
       } catch (error) {
         console.error('Error loading exam:', error);
+        setError(error instanceof Error ? error.message : 'Failed to load exam');
       } finally {
         setLoading(false);
       }
@@ -136,25 +193,28 @@ export default function ExamPlayer() {
   }, [attemptId, examId, startTimer]);
 
   // Handler for selecting an option
-  const handleSelectOption = useCallback((optionIdx: number) => {
-    if (!currentQuestion) return;
+  const handleSelectOption = useCallback(async (optionIdx: number) => {
+    if (!currentQuestion || !attemptDocId) return;
     
     setQuestions(prevQuestions => 
       prevQuestions.map((q, idx) => 
         idx === currentQuestionIdx
-          ? { ...q, selectedIdx: optionIdx, timeSpentMs: q.timeSpentMs + 1000 } // Increment time spent
+          ? { ...q, selectedIdx: optionIdx, timeSpentMs: q.timeSpentMs + 1000 }
           : q
       )
     );
     
-    // Save to Firestore (debounced in real implementation)
-    if (attemptId) {
-      saveAnswer(attemptId, currentQuestion.id, {
+    // Save answer to Firestore
+    try {
+      await saveAnswer(attemptDocId, currentQuestion.id, {
         selectedIdx: optionIdx,
-        timeSpentMs: currentQuestion.timeSpentMs + 1000
+        timeSpentMs: currentQuestion.timeSpentMs + 1000,
+        questionId: currentQuestion.id
       });
+    } catch (error) {
+      console.error('Error saving answer:', error);
     }
-  }, [currentQuestion, currentQuestionIdx, attemptId]);
+  }, [currentQuestion, currentQuestionIdx, attemptDocId]);
 
   // Navigation handlers
   const handleNextQuestion = () => {
@@ -175,24 +235,58 @@ export default function ExamPlayer() {
   };
 
   const handleSubmit = async () => {
+    if (!attemptDocId) return;
+    
     pauseTimer();
     
     try {
-      // Submit to Firestore
-      if (attemptId) {
-        await submitAttempt(attemptId, timeLeft);
-      }
+      // Submit attempt to Firestore
+      await submitAttempt(attemptDocId, timeLeft, questions);
       
-      // Redirect to analysis
-      navigate(`/analysis/${attemptId}`);
+      // Navigate to results page
+      navigate(`/analysis/${attemptDocId}`);
     } catch (error) {
       console.error('Error submitting exam:', error);
-      // Show error message
+      setError('Failed to submit exam. Please try again.');
     }
   };
 
+  // Loading state
   if (loading) {
-    return <LinearProgress />;
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', flexDirection: 'column' }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" sx={{ mt: 2 }}>Loading exam...</Typography>
+      </Box>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Container maxWidth="md" sx={{ mt: 4 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>
+          <Typography variant="h6">{error}</Typography>
+        </Alert>
+        <Button variant="contained" onClick={() => navigate('/tests')}>
+          Back to Tests
+        </Button>
+      </Container>
+    );
+  }
+
+  // No questions state
+  if (questions.length === 0) {
+    return (
+      <Container maxWidth="md" sx={{ mt: 4 }}>
+        <Alert severity="warning">
+          <Typography variant="h6">No questions available for this test</Typography>
+        </Alert>
+        <Button variant="contained" onClick={() => navigate('/tests')} sx={{ mt: 2 }}>
+          Back to Tests
+        </Button>
+      </Container>
+    );
   }
 
   // Question palette - shows all questions with their status

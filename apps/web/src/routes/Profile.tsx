@@ -22,7 +22,6 @@ import {
   CircularProgress,
   Alert,
   Badge,
-  LinearProgress,
   useTheme,
   alpha
 } from '@mui/material';
@@ -38,42 +37,18 @@ import {
 } from '@mui/icons-material';
 import { useAuthState } from '../lib/auth';
 import { useQuery } from '@tanstack/react-query';
+import { useUserStatsSummary } from '@/hooks/useUserStats';
+import { useAchievements } from '@/hooks/useAchievements';
+import { useUserRank } from '@/hooks/useLeaderboard';
+import { db } from '@/lib/firebase';
+import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import type { Attempt } from '@/lib/models';
 
-// Mock user stats for UI development
-const mockUserStats = {
-  testsCompleted: 27,
-  questionsAnswered: 1432,
-  accuracy: 78,
-  averageScore: 82,
-  streak: 7,
-  totalTimeSpent: '37h 45m',
-  rank: 153,
-  totalUsers: 2500,
-  percentile: 94,
-  achievementsCount: 12,
-  totalAchievements: 30,
-};
-
-// Mock achievement data
-const mockAchievements = [
-  { id: 1, name: '100 Questions', description: 'Answer 100 questions', earned: true, date: '2023-10-15', icon: '🎯' },
-  { id: 2, name: 'Perfect Score', description: 'Get 100% on any test', earned: true, date: '2023-10-20', icon: '🏆' },
-  { id: 3, name: '7 Day Streak', description: 'Practice for 7 days in a row', earned: true, date: '2023-10-25', icon: '🔥' },
-  { id: 4, name: 'Speed Demon', description: 'Complete a test in record time', earned: false, progress: 60, icon: '⚡' },
-  { id: 5, name: 'Knowledge Master', description: 'Answer 1000 questions', earned: true, date: '2023-11-01', icon: '🧠' },
-  { id: 6, name: 'Test Champion', description: 'Complete 20 mock tests', earned: true, date: '2023-11-05', icon: '🏅' },
-  { id: 7, name: 'Early Bird', description: 'Complete 5 tests before 8 AM', earned: false, progress: 40, icon: '🐦' },
-  { id: 8, name: 'Night Owl', description: 'Complete 5 tests after 10 PM', earned: false, progress: 20, icon: '🦉' },
-];
-
-// Mock test history
-const mockTestHistory = [
-  { id: 'test1', name: 'SSC CGL Mock Test 1', date: '2023-11-10', score: 87, duration: '1h 30m' },
-  { id: 'test2', name: 'Bank PO Sectional: Reasoning', date: '2023-11-08', score: 92, duration: '45m' },
-  { id: 'test3', name: 'Daily Quiz', date: '2023-11-05', score: 70, duration: '10m' },
-  { id: 'test4', name: 'SSC CHSL Full Mock', date: '2023-11-01', score: 78, duration: '1h 15m' },
-  { id: 'test5', name: 'Quant Sectional Test', date: '2023-10-28', score: 65, duration: '30m' },
-];
+// Create extended attempt type for profile display
+interface TestAttempt extends Attempt {
+  examTitle: string;
+  timeSpentSec: number;
+}
 
 export default function Profile() {
   const user = useAuthState();
@@ -91,15 +66,37 @@ export default function Profile() {
   const [error, setError] = useState('');
   const theme = useTheme();
   
-  // Query for user stats (using mock data for now)
-  const { data: userStats } = useQuery({
-    queryKey: ['user-stats', user?.uid],
+  // Fetch real user data
+  const { summary, isLoading: statsLoading } = useUserStatsSummary();
+  const { achievements, totalPoints, isLoading: achievementsLoading } = useAchievements();
+  const { rank, totalUsers, isLoading: rankLoading } = useUserRank('global');
+  
+  // Fetch recent test attempts
+  const { data: recentAttempts, isLoading: attemptsLoading } = useQuery({
+    queryKey: ['recent-attempts', user?.uid],
     queryFn: async () => {
-      // In real app, this would fetch from Firebase
-      return mockUserStats;
+      if (!user?.uid) return [];
+      const attemptsRef = collection(db, 'attempts');
+      const q = query(
+        attemptsRef,
+        where('userId', '==', user.uid),
+        where('status', '==', 'completed'),
+        orderBy('submittedAt', 'desc'),
+        limit(10)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as TestAttempt[];
     },
-    initialData: mockUserStats,
+    enabled: !!user?.uid,
   });
+  
+  // Calculate percentile
+  const percentile = rank && totalUsers ? Math.round(((totalUsers - rank) / totalUsers) * 100) : 0;
+  
+  const isLoading = statsLoading || achievementsLoading || rankLoading || attemptsLoading;
 
   const handleEditProfile = () => {
     setEditing(true);
@@ -261,9 +258,9 @@ export default function Profile() {
                 {editedProfile.email}
               </Typography>
               
-              {!editing && (
+              {!editing && rank && (
                 <Chip 
-                  label={`Rank #${userStats.rank}`}
+                  label={`Rank #${rank}`}
                   color="primary"
                   sx={{ mt: 1 }}
                 />
@@ -456,13 +453,18 @@ export default function Profile() {
             <Typography variant="h6" gutterBottom>
               Quick Stats
             </Typography>
+            {isLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                <CircularProgress />
+              </Box>
+            ) : (
             <List dense>
               <ListItem>
                 <ListItemIcon>
                   <SchoolIcon color="primary" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={`${userStats.testsCompleted} Tests Completed`}
+                  primary={`${summary?.testsCompleted || 0} Tests Completed`}
                 />
               </ListItem>
               <ListItem>
@@ -470,7 +472,7 @@ export default function Profile() {
                   <AchievementIcon color="primary" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={`${userStats.achievementsCount}/${userStats.totalAchievements} Achievements`}
+                  primary={`${achievements.length} Achievements • ${totalPoints} XP`}
                 />
               </ListItem>
               <ListItem>
@@ -478,7 +480,7 @@ export default function Profile() {
                   <StatsIcon color="primary" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={`${userStats.percentile}th Percentile`}
+                  primary={`${percentile}th Percentile`}
                 />
               </ListItem>
               <ListItem>
@@ -486,10 +488,12 @@ export default function Profile() {
                   <HistoryIcon color="primary" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={`${userStats.totalTimeSpent} Total Practice Time`}
+                  primary={summary?.timeSpent || '0m'}
+                  secondary="Total Practice Time"
                 />
               </ListItem>
             </List>
+            )}
           </Paper>
         </Grid>
 
@@ -532,10 +536,17 @@ export default function Profile() {
               <Tab label="Statistics" />
               <Tab label="Test History" />
               <Tab label="Achievements" />
-            </Tabs>            <Box sx={{ p: 3 }}>
+            </Tabs>
+            
+            <Box sx={{ p: 3 }}>
               {/* Statistics Tab */}
               {activeTab === 0 && (
-                <Grid container spacing={3}>
+                isLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+                    <CircularProgress size={60} />
+                  </Box>
+                ) : (
+                  <Grid container spacing={3}>
                   <Grid item xs={12} sm={6} md={4}>
                     <Card
                       sx={{
@@ -565,72 +576,410 @@ export default function Profile() {
                             mt: 1
                           }}
                         >
-                          {userStats.averageScore}%
+                          {summary?.recentScore || 0}%
                         </Typography>
                       </CardContent>
                     </Card>
                   </Grid>
                   
                   <Grid item xs={12} sm={6} md={4}>
-                    <Card>
-                      <CardContent>
-                        <Typography color="text.secondary" gutterBottom>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: theme.palette.mode === 'light'
+                          ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
+                          : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ height: '100%', p: 3 }}>
+                        <Typography color="text.secondary" variant="subtitle2" gutterBottom sx={{ fontWeight: 500 }}>
                           Accuracy
                         </Typography>
-                        <Typography variant="h5" component="div">
-                          {userStats.accuracy}%
+                        <Typography 
+                          variant="h4" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.secondary.main,
+                            mt: 1
+                          }}
+                        >
+                          {summary?.accuracy || 0}%
                         </Typography>
                       </CardContent>
                     </Card>
                   </Grid>
                   
                   <Grid item xs={12} sm={6} md={4}>
-                    <Card>
-                      <CardContent>
-                        <Typography color="text.secondary" gutterBottom>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: theme.palette.mode === 'light'
+                          ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
+                          : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ height: '100%', p: 3 }}>
+                        <Typography color="text.secondary" variant="subtitle2" gutterBottom sx={{ fontWeight: 500 }}>
                           Questions Answered
                         </Typography>
-                        <Typography variant="h5" component="div">
-                          {userStats.questionsAnswered}
+                        <Typography 
+                          variant="h4" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.success.main,
+                            mt: 1
+                          }}
+                        >
+                          {summary?.questionsAnswered || 0}
                         </Typography>
                       </CardContent>
                     </Card>
                   </Grid>
                   
                   <Grid item xs={12} sm={6} md={4}>
-                    <Card>
-                      <CardContent>
-                        <Typography color="text.secondary" gutterBottom>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: theme.palette.mode === 'light'
+                          ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
+                          : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ height: '100%', p: 3 }}>
+                        <Typography color="text.secondary" variant="subtitle2" gutterBottom sx={{ fontWeight: 500 }}>
                           Current Streak
                         </Typography>
-                        <Typography variant="h5" component="div">
-                          {userStats.streak} days 🔥
+                        <Typography 
+                          variant="h4" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.warning.main,
+                            mt: 1
+                          }}
+                        >
+                          {summary?.streak || 0} 🔥
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  {/* Test Type Performance Breakdown */}
+                  <Grid item xs={12}>
+                    <Typography variant="h6" gutterBottom sx={{ mt: 2, mb: 2, fontWeight: 600 }}>
+                      Performance by Test Type
+                    </Typography>
+                  </Grid>
+
+                  {/* Full Mock Performance */}
+                  <Grid item xs={12} md={4}>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: `linear-gradient(135deg, ${alpha(theme.palette.info.main, 0.15)}, ${alpha(theme.palette.info.main, 0.05)})`,
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.info.main, 0.3)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <Avatar sx={{ bgcolor: theme.palette.info.main, mr: 1.5 }}>
+                            <SchoolIcon />
+                          </Avatar>
+                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            Full Mock
+                          </Typography>
+                        </Box>
+                        <Typography 
+                          variant="h3" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.info.main,
+                            mb: 1
+                          }}
+                        >
+                          {summary?.fullMockScore || 0}/100
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Latest Performance
+                        </Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Accuracy: {summary?.fullMockAccuracy || 0}%
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Tests: {summary?.fullMockTests || 0}
+                          </Typography>
+                        </Box>
+                        {(summary?.fullMockScore || 0) >= 75 && (
+                          <Chip 
+                            label="Top 10% 🏆" 
+                            size="small" 
+                            sx={{ 
+                              mt: 1, 
+                              bgcolor: alpha(theme.palette.success.main, 0.2),
+                              color: theme.palette.success.main,
+                              fontWeight: 600
+                            }} 
+                          />
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  {/* Sectional Mock Performance */}
+                  <Grid item xs={12} md={4}>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: `linear-gradient(135deg, ${alpha(theme.palette.success.main, 0.15)}, ${alpha(theme.palette.success.main, 0.05)})`,
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.success.main, 0.3)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <Avatar sx={{ bgcolor: theme.palette.success.main, mr: 1.5 }}>
+                            <StatsIcon />
+                          </Avatar>
+                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            Sectional
+                          </Typography>
+                        </Box>
+                        <Typography 
+                          variant="h3" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.success.main,
+                            mb: 1
+                          }}
+                        >
+                          {summary?.sectionalScore || 0}/100
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Latest Performance
+                        </Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Accuracy: {summary?.sectionalAccuracy || 0}%
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Tests: {summary?.sectionalTests || 0}
+                          </Typography>
+                        </Box>
+                        {(summary?.sectionalScore || 0) >= 75 && (
+                          <Chip 
+                            label="Excellent! ⭐" 
+                            size="small" 
+                            sx={{ 
+                              mt: 1, 
+                              bgcolor: alpha(theme.palette.success.main, 0.2),
+                              color: theme.palette.success.main,
+                              fontWeight: 600
+                            }} 
+                          />
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+
+                  {/* Topic-wise Performance */}
+                  <Grid item xs={12} md={4}>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: `linear-gradient(135deg, ${alpha(theme.palette.warning.main, 0.15)}, ${alpha(theme.palette.warning.main, 0.05)})`,
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.warning.main, 0.3)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ p: 3 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                          <Avatar sx={{ bgcolor: theme.palette.warning.main, mr: 1.5 }}>
+                            <AchievementIcon />
+                          </Avatar>
+                          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                            Topic-wise
+                          </Typography>
+                        </Box>
+                        <Typography 
+                          variant="h3" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.warning.main,
+                            mb: 1
+                          }}
+                        >
+                          {summary?.topicWiseScore || 0}/100
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                          Latest Performance
+                        </Typography>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Accuracy: {summary?.topicWiseAccuracy || 0}%
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            Tests: {summary?.topicWiseTests || 0}
+                          </Typography>
+                        </Box>
+                        {(summary?.topicWiseScore || 0) >= 75 && (
+                          <Chip 
+                            label="Keep it up! 💪" 
+                            size="small" 
+                            sx={{ 
+                              mt: 1, 
+                              bgcolor: alpha(theme.palette.warning.main, 0.2),
+                              color: theme.palette.warning.main,
+                              fontWeight: 600
+                            }} 
+                          />
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: theme.palette.mode === 'light'
+                          ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
+                          : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ height: '100%', p: 3 }}>
+                        <Typography color="text.secondary" variant="subtitle2" gutterBottom sx={{ fontWeight: 500 }}>
+                          Current Streak
+                        </Typography>
+                        <Typography 
+                          variant="h4" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.warning.main,
+                            mt: 1
+                          }}
+                        >
+                          {summary?.streak || 0} 🔥
                         </Typography>
                       </CardContent>
                     </Card>
                   </Grid>
                   
                   <Grid item xs={12} sm={6} md={4}>
-                    <Card>
-                      <CardContent>
-                        <Typography color="text.secondary" gutterBottom>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: theme.palette.mode === 'light'
+                          ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
+                          : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ height: '100%', p: 3 }}>
+                        <Typography color="text.secondary" variant="subtitle2" gutterBottom sx={{ fontWeight: 500 }}>
                           Tests Completed
                         </Typography>
-                        <Typography variant="h5" component="div">
-                          {userStats.testsCompleted}
+                        <Typography 
+                          variant="h4" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.info.main,
+                            mt: 1
+                          }}
+                        >
+                          {summary?.testsCompleted || 0}
                         </Typography>
                       </CardContent>
                     </Card>
                   </Grid>
                   
                   <Grid item xs={12} sm={6} md={4}>
-                    <Card>
-                      <CardContent>
-                        <Typography color="text.secondary" gutterBottom>
+                    <Card
+                      sx={{
+                        height: '100%',
+                        background: theme.palette.mode === 'light'
+                          ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
+                          : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
+                        backdropFilter: 'blur(8px)',
+                        border: `1px solid ${alpha(theme.palette.primary.main, 0.1)}`,
+                        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                        '&:hover': {
+                          transform: 'translateY(-4px)',
+                          boxShadow: theme.shadows[8],
+                        },
+                      }}
+                    >
+                      <CardContent sx={{ height: '100%', p: 3 }}>
+                        <Typography color="text.secondary" variant="subtitle2" gutterBottom sx={{ fontWeight: 500 }}>
                           Rank
                         </Typography>
-                        <Typography variant="h5" component="div">
-                          #{userStats.rank} / {userStats.totalUsers}
+                        <Typography 
+                          variant="h4" 
+                          component="div" 
+                          sx={{ 
+                            fontWeight: 700,
+                            color: theme.palette.error.main,
+                            mt: 1
+                          }}
+                        >
+                          #{rank || '-'} / {totalUsers || '-'}
                         </Typography>
                       </CardContent>
                     </Card>
@@ -643,98 +992,131 @@ export default function Profile() {
                     </Alert>
                   </Grid>
                 </Grid>
+                )
               )}
               
               {/* Test History Tab */}
               {activeTab === 1 && (
-                <Box>
-                  <List>
-                    {mockTestHistory.map((test, index) => (
-                      <React.Fragment key={test.id}>
-                        <ListItem 
-                          button 
-                          onClick={() => {/* Navigate to test details */}}
-                          sx={{ py: 2 }}
-                        >
-                          <ListItemText
-                            primary={test.name}
-                            secondary={
-                              <>
-                                <Typography component="span" variant="body2" color="text.primary">
-                                  Score: {test.score}%
-                                </Typography>
-                                {` — Completed on ${test.date} • Duration: ${test.duration}`}
-                              </>
-                            }
-                          />
-                          <Chip 
-                            label={`${test.score}%`}
-                            color={
-                              test.score >= 90 ? 'success' : 
-                              test.score >= 75 ? 'primary' : 
-                              test.score >= 60 ? 'warning' : 'error'
-                            }
-                          />
-                        </ListItem>
-                        {index < mockTestHistory.length - 1 && <Divider />}
-                      </React.Fragment>
-                    ))}
-                  </List>
+                isLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+                    <CircularProgress size={60} />
+                  </Box>
+                ) : (
+                  <Box>
+                  {!recentAttempts || recentAttempts.length === 0 ? (
+                    <Alert severity="info">
+                      No test history yet. Start taking tests to see your progress here!
+                    </Alert>
+                  ) : (
+                    <>
+                      <List>
+                        {recentAttempts.map((attempt, index) => {
+                          const percentage = Math.round(attempt.score?.percentage || 0);
+                          return (
+                          <React.Fragment key={attempt.id}>
+                            <ListItem 
+                              sx={{ py: 2 }}
+                            >
+                              <ListItemText
+                                primary={attempt.examTitle}
+                                secondary={
+                                  <>
+                                    <Typography component="span" variant="body2" color="text.primary">
+                                      Score: {percentage}%
+                                    </Typography>
+                                    {` — Completed on ${attempt.submittedAt?.toDate().toLocaleDateString() || 'N/A'} • Duration: ${Math.floor(attempt.timeSpentSec / 60)}m ${attempt.timeSpentSec % 60}s`}
+                                  </>
+                                }
+                              />
+                              <Chip 
+                                label={`${percentage}%`}
+                                color={
+                                  percentage >= 90 ? 'success' : 
+                                  percentage >= 75 ? 'primary' : 
+                                  percentage >= 60 ? 'warning' : 'error'
+                                }
+                              />
+                            </ListItem>
+                            {index < recentAttempts.length - 1 && <Divider />}
+                          </React.Fragment>
+                          );
+                        })}
+                      </List>
                   
-                  <Button fullWidth variant="outlined" sx={{ mt: 2 }}>
-                    View All Test History
-                  </Button>
+                      {recentAttempts && recentAttempts.length > 0 && (
+                        <Button fullWidth variant="outlined" sx={{ mt: 2 }}>
+                          View All Test History
+                        </Button>
+                      )}
+                    </>
+                  )}
                 </Box>
+                )
               )}
               
               {/* Achievements Tab */}
               {activeTab === 2 && (
+                isLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+                    <CircularProgress size={60} />
+                  </Box>
+                ) : (
+                  <Box>
+                  {!achievements || achievements.length === 0 ? (
+                    <Alert severity="info">
+                      No achievements yet. Keep testing to unlock achievements!
+                    </Alert>
+                  ) : (
+                  <>
+                    <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                        Unlocked Achievements
+                      </Typography>
+                      <Chip 
+                        label={`${achievements.length} Earned • ${totalPoints} XP`}
+                        color="primary"
+                        variant="outlined"
+                      />
+                    </Box>
                 <Grid container spacing={2}>
-                  {mockAchievements.map(achievement => (
+                  {achievements.map(achievement => (
                     <Grid item xs={12} sm={6} key={achievement.id}>
                       <Card 
-                        variant={achievement.earned ? 'outlined' : 'elevation'}
+                        variant="outlined"
                         sx={{ 
                           height: '100%',
-                          opacity: achievement.earned ? 1 : 0.7,
                           position: 'relative',
                           background: theme.palette.mode === 'light'
                             ? 'linear-gradient(135deg, rgba(255,255,255,0.95), rgba(255,255,255,0.85))'
                             : 'linear-gradient(135deg, rgba(30,30,30,0.95), rgba(30,30,30,0.85))',
                           backdropFilter: 'blur(8px)',
-                          border: achievement.earned 
-                            ? `2px solid ${alpha(theme.palette.primary.main, 0.3)}`
-                            : `1px solid ${alpha(theme.palette.divider, 0.1)}`,
+                          border: `2px solid ${alpha(theme.palette.primary.main, 0.3)}`,
                           transition: 'all 0.3s ease-in-out',
                           '&:hover': {
                             transform: 'translateY(-4px)',
                             boxShadow: theme.shadows[8],
-                            borderColor: achievement.earned 
-                              ? alpha(theme.palette.primary.main, 0.5)
-                              : alpha(theme.palette.divider, 0.2),
+                            borderColor: alpha(theme.palette.primary.main, 0.5),
                           },
                         }}
                       >
-                        {achievement.earned && (
-                          <Box
-                            sx={{
-                              position: 'absolute',
-                              top: 10,
-                              right: 10,
-                              zIndex: 1,
-                            }}
-                          >
-                            <Avatar sx={{ width: 24, height: 24, bgcolor: 'success.main' }}>
-                              <CheckIcon sx={{ fontSize: 16 }} />
-                            </Avatar>
-                          </Box>
-                        )}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: 10,
+                            right: 10,
+                            zIndex: 1,
+                          }}
+                        >
+                          <Avatar sx={{ width: 24, height: 24, bgcolor: 'success.main' }}>
+                            <CheckIcon sx={{ fontSize: 16 }} />
+                          </Avatar>
+                        </Box>
                         
                         <CardHeader
                           avatar={
                             <Avatar 
                               sx={{ 
-                                bgcolor: achievement.earned ? 'primary.main' : 'grey.500',
+                                bgcolor: 'primary.main',
                                 width: 48,
                                 height: 48,
                                 fontSize: '1.5rem',
@@ -743,28 +1125,41 @@ export default function Profile() {
                               {achievement.icon}
                             </Avatar>
                           }
-                          title={achievement.name}
+                          title={
+                            <Box>
+                              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                {achievement.name}
+                              </Typography>
+                              <Chip 
+                                label={`${achievement.points} XP`}
+                                size="small"
+                                color="warning"
+                                sx={{ mt: 0.5 }}
+                              />
+                            </Box>
+                          }
                           subheader={
-                            achievement.earned ? 
-                              `Earned on ${achievement.date}` : 
-                              `Progress: ${achievement.progress}%`
+                            achievement.earnedAt ? 
+                              `Earned on ${achievement.earnedAt.toDate().toLocaleDateString()}` : 
+                              'Recently unlocked'
                           }
                         />
                         <CardContent>
                           <Typography variant="body2" color="text.secondary">
                             {achievement.description}
                           </Typography>
-                          
-                          {!achievement.earned && achievement.progress && (
-                            <Box sx={{ mt: 2 }}>
-                              <LinearProgress variant="determinate" value={achievement.progress} />
-                            </Box>
-                          )}
+                          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                            {achievement.category.toUpperCase()} • {achievement.level.toUpperCase()}
+                          </Typography>
                         </CardContent>
                       </Card>
                     </Grid>
                   ))}
                 </Grid>
+                  </>
+                  )}
+                </Box>
+                )
               )}
             </Box>
           </Paper>

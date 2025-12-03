@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useGuestMode } from '../lib/guestContext';
 import { 
   Box, 
   Button, 
@@ -30,9 +31,15 @@ export default function SignIn() {
   const location = useLocation();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [error, setError] = useState('');
+  const { enableGuestMode } = useGuestMode();
 
   // Get redirect path from location state or default to dashboard
   const from = (location.state?.from?.pathname || '/dashboard') as string;
+
+  const handleGuestAccess = () => {
+    enableGuestMode();
+    navigate('/quick-quiz');
+  };
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
@@ -158,23 +165,34 @@ export default function SignIn() {
                   )}
                 </Button>
 
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', my: 2 }}>
-                  <Box 
-                    component={LoginIcon} 
-                    sx={{ 
-                      mr: 1, 
-                      color: theme.palette.mode === 'dark' ? '#8B5CF6' : '#7C3AED',
-                      fontSize: '1.2rem'
-                    }} 
-                  />
-                  <Typography 
-                    variant="subtitle1" 
-                    component="span"
-                    sx={{ fontWeight: 600, ...gradientText }}
-                  >
-                    Quick Access, No Passwords
-                  </Typography>
-                </Box>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  size="large"
+                  onClick={handleGuestAccess}
+                  startIcon={<LoginIcon />}
+                  sx={{
+                    py: 1.5,
+                    borderColor: theme => theme.palette.mode === 'dark' ? '#8B5CF6' : '#7C3AED',
+                    color: theme => theme.palette.mode === 'dark' ? '#8B5CF6' : '#7C3AED',
+                    '&:hover': {
+                      borderColor: '#7C3AED',
+                      backgroundColor: alpha('#7C3AED', 0.08),
+                    },
+                    fontSize: '1rem',
+                    fontWeight: 600,
+                  }}
+                >
+                  Quick Access, No Passwords
+                </Button>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  align="center"
+                  sx={{ mt: 1 }}
+                >
+                  Start practicing with quick quizzes instantly
+                </Typography>
 
                 <Box 
                   sx={{ 

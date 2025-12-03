@@ -7,9 +7,10 @@ import { AuthGuard } from '../../lib/authContext';
 interface LayoutProps {
   children?: React.ReactNode;
   requireAuth?: boolean;
+  allowGuest?: boolean;
 }
 
-export default function Layout({ children, requireAuth = true }: LayoutProps) {
+export default function Layout({ children, requireAuth = true, allowGuest = false }: LayoutProps) {
   const theme = useTheme();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -81,10 +82,11 @@ export default function Layout({ children, requireAuth = true }: LayoutProps) {
     </Box>
   );
 
-  // Wrap with AuthGuard if authentication is required
-  if (requireAuth) {
-    return <AuthGuard allowAnonymous={false}>{content}</AuthGuard>;
+  // Return content directly if no auth is required
+  if (!requireAuth) {
+    return content;
   }
 
-  return content;
+  // Wrap with AuthGuard, allowing guest access if specified
+  return <AuthGuard allowGuest={allowGuest}>{content}</AuthGuard>;
 }

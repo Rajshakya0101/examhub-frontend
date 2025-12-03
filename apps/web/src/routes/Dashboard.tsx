@@ -20,11 +20,12 @@ import {
   alpha,
   Chip
 } from '@mui/material';
-import NotificationDemo from '@/components/NotificationDemo';
 import { useAuthState } from '@/lib/auth';
 import { useQuery } from '@tanstack/react-query';
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { useUserStatsSummary } from '@/hooks/useUserStats';
+import { useRecommendedExams } from '@/hooks/useRecommendedExams';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
@@ -40,6 +41,12 @@ import WorkspacePremiumIcon from '@mui/icons-material/WorkspacePremium';
 export default function Dashboard() {
   const user = useAuthState();
   const theme = useTheme();
+  
+  // Fetch real user stats using custom hook
+  const { summary: stats, isLoading: loadingStats } = useUserStatsSummary();
+  
+  // Get recommended exams based on user performance
+  const { data: recommendedExams, isLoading: loadingRecommendations } = useRecommendedExams();
 
   // Fetch recent attempts
   const { data: recentAttempts, isLoading: loadingAttempts } = useQuery({
@@ -81,42 +88,6 @@ export default function Dashboard() {
     }
   });
 
-  // Mock data for now
-  const stats = {
-    streak: 5,
-    questionsAnswered: 240,
-    accuracy: 78,
-    timeSpent: '12h 30m',
-    rank: 120,
-    totalUsers: 5480,
-    improvement: 12,
-    recentScore: 85
-  };
-
-  // Recommended exams data
-  const recommendedExams = [
-    {
-      id: 'ibps-po-1',
-      title: "IBPS PO Prelims Mock Test",
-      category: "Banking",
-      duration: "60 min",
-      questions: 100,
-      difficulty: "Moderate",
-      color: theme.palette.primary.main,
-      progress: 0
-    },
-    {
-      id: 'ssc-cgl-1',
-      title: "SSC CGL Tier I Practice",
-      category: "Government",
-      duration: "75 min",
-      questions: 100,
-      difficulty: "Advanced",
-      color: theme.palette.secondary.main,
-      progress: 25
-    }
-  ];
-
   useEffect(() => {
     // Could add analytics tracking here
     // analytics.logEvent('screen_view', { screen_name: 'Dashboard' });
@@ -131,9 +102,6 @@ export default function Dashboard() {
       borderRadius: 3
     }}>
       <Container maxWidth="lg">
-        {/* Notification Demo Component */}
-        <NotificationDemo />
-        
         {/* Welcome Section with Hero */}
         <Box sx={{ 
           py: 4, 
@@ -600,12 +568,17 @@ export default function Dashboard() {
             <Box sx={{ mb: 4 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h5" fontWeight={600}>
-                  Recommended Exams
+                  Recommended For You
                 </Typography>
               </Box>
               
-              <Stack spacing={2}>
-                {recommendedExams.map((exam) => (
+              {loadingRecommendations ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <Stack spacing={2}>
+                  {recommendedExams?.map((exam) => (
                   <Paper key={exam.id} sx={{ 
                     borderRadius: 3,
                     overflow: 'hidden',
@@ -633,6 +606,13 @@ export default function Dashboard() {
                       <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>
                         {exam.title}
                       </Typography>
+                      
+                      {/* Show recommendation reason */}
+                      {exam.reason && (
+                        <Typography variant="body2" color="primary" sx={{ mb: 2, fontStyle: 'italic' }}>
+                          💡 {exam.reason}
+                        </Typography>
+                      )}
                       
                       <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center' }}>
@@ -688,6 +668,7 @@ export default function Dashboard() {
                   </Paper>
                 ))}
               </Stack>
+              )}
             </Box>
             
             {/* Quick Links */}

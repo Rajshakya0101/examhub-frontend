@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Box,
   Container,
@@ -15,7 +15,6 @@ import {
   Divider,
   Stack,
   IconButton,
-  LinearProgress,
   Alert,
   AlertTitle,
   useTheme,
@@ -24,7 +23,15 @@ import {
   Badge,
   Rating,
   Tooltip,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText
 } from '@mui/material';
 import {
   Timer as TimerIcon,
@@ -33,77 +40,48 @@ import {
   Bookmark as BookmarkIcon,
   BookmarkBorder as BookmarkBorderIcon,
   EmojiEvents as EmojiEventsIcon,
-  AccessTime as AccessTimeIcon,
   History as HistoryIcon,
-  TrendingUp as TrendingUpIcon,
   School as SchoolIcon,
   PlayArrow as PlayArrowIcon,
   FlagOutlined as FlagOutlinedIcon,
   BarChart as BarChartIcon,
-  CalendarMonth as CalendarMonthIcon,
   WorkspacePremium as WorkspacePremiumIcon,
   LocalFireDepartment as LocalFireDepartmentIcon,
-  Star as StarIcon,
-  StarBorder as StarBorderIcon
+  CheckCircle as CheckIcon
 } from '@mui/icons-material';
-import { useNavigate, Link } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import axios from 'axios';
+import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useAuthState } from '@/lib/auth';
+import FullMock from './FullMock';
+import SectionalMock from './SectionalMock';
+import TopicWiseMock from './TopicWiseMock';
 
 // Mock data for exams
 const mockExams = [
   {
-    id: 'ssc-cgl-2023-mock-1',
-    title: 'SSC CGL 2023 Mock Test 1',
+    id: 'ssc-cgl-tier1-2023',
+    title: 'SSC CGL Tier 1 Mock Test',
     category: 'SSC',
     subcategory: 'CGL',
     type: 'Mock Test',
     difficulty: 'Medium',
     questions: 100,
-    duration: 120, // in minutes
+    duration: 60, // in minutes (1h)
     sections: [
       { name: 'General Intelligence & Reasoning', questions: 25 },
       { name: 'General Awareness', questions: 25 },
       { name: 'Quantitative Aptitude', questions: 25 },
       { name: 'English Comprehension', questions: 25 },
     ],
-    description: 'Complete mock test for SSC CGL Tier 1 2023 with all sections and time limit.',
+    description: 'Full-length mock test for SSC CGL Tier 1 exam with sectional time limits.',
     isBookmarked: false,
     isPopular: true,
-    isPremium: false,
-    attemptsCount: 2457,
-    rating: 4.8,
-    reviews: 124,
-    lastUpdated: '2023-10-15',
-    color: '#2563eb', // Primary color
-    image: '/images/tests/ssc-bg.jpg',
-    featured: true,
-    accuracy: 76,
-    cutoff: 65
-  },
-  {
-    id: 'bank-po-2023-mock-1',
-    title: 'Bank PO 2023 Mock Test',
-    category: 'Banking',
-    subcategory: 'PO',
-    type: 'Mock Test',
-    difficulty: 'Hard',
-    questions: 100,
-    duration: 60,
-    sections: [
-      { name: 'English Language', questions: 30 },
-      { name: 'Quantitative Aptitude', questions: 35 },
-      { name: 'Reasoning Ability', questions: 35 },
-    ],
-    description: 'Full-length mock test for Bank PO exam with sectional time limits.',
-    isBookmarked: true,
-    isPopular: true,
     isPremium: true,
-    attemptsCount: 1865,
-    rating: 4.9,
-    reviews: 93,
-    lastUpdated: '2023-09-30',
-    color: '#7c3aed', // Secondary color
-    image: '/images/tests/banking-bg.jpg',
+    color: '#7c3aed', // Purple color matching the image
+    image: '/images/tests/ssc-bg.jpg',
     featured: true,
     accuracy: 68,
     cutoff: 72
@@ -127,10 +105,6 @@ const mockExams = [
     isBookmarked: false,
     isPopular: false,
     isPremium: true,
-    attemptsCount: 1253,
-    rating: 4.7,
-    reviews: 67,
-    lastUpdated: '2023-10-02',
     color: '#2563eb', // Primary color
     image: '/images/tests/ssc-chsl-bg.jpg',
     featured: false,
@@ -153,10 +127,6 @@ const mockExams = [
     isBookmarked: false,
     isPopular: false,
     isPremium: false,
-    attemptsCount: 3042,
-    rating: 4.5,
-    reviews: 156,
-    lastUpdated: '2023-10-10',
     color: '#10b981', // Success color
     image: '/images/tests/reasoning-bg.jpg',
     featured: false,
@@ -179,10 +149,6 @@ const mockExams = [
     isBookmarked: false,
     isPopular: true,
     isPremium: false,
-    attemptsCount: 2765,
-    rating: 4.6,
-    reviews: 134,
-    lastUpdated: '2023-10-18',
     color: '#f59e0b', // Warning color
     image: '/images/tests/quant-bg.jpg',
     featured: true,
@@ -190,30 +156,48 @@ const mockExams = [
     cutoff: 58
   },
   {
-    id: 'upsc-prelims-2023',
-    title: 'UPSC Prelims 2023 Paper I',
-    category: 'UPSC',
-    subcategory: 'Prelims',
-    type: 'Previous Year',
-    difficulty: 'Hard',
-    questions: 100,
-    duration: 120,
+    id: 'english-sectional-1',
+    title: 'English Sectional Test',
+    category: 'Sectional',
+    subcategory: 'English Language',
+    type: 'Sectional',
+    difficulty: 'Medium',
+    questions: 25,
+    duration: 12,
     sections: [
-      { name: 'General Studies Paper I', questions: 100 },
+      { name: 'English Language', questions: 25 },
     ],
-    description: 'Previous year UPSC Civil Services Preliminary Exam Paper I with solutions and explanations.',
+    description: 'Comprehensive practice on English grammar, vocabulary, and comprehension.',
     isBookmarked: false,
-    isPopular: true,
-    isPremium: true,
-    attemptsCount: 3521,
-    rating: 4.9,
-    reviews: 215,
-    lastUpdated: '2023-06-20',
-    color: '#3b82f6', // Info color
-    image: '/images/tests/upsc-bg.jpg',
-    featured: true,
-    accuracy: 58,
-    cutoff: 75
+    isPopular: false,
+    isPremium: false,
+    color: '#3b82f6', // Blue color
+    image: '/images/tests/english-bg.jpg',
+    featured: false,
+    accuracy: 75,
+    cutoff: 55
+  },
+  {
+    id: 'computer-sectional-1',
+    title: 'Computer Knowledge Test',
+    category: 'Sectional',
+    subcategory: 'Computer Knowledge',
+    type: 'Sectional',
+    difficulty: 'Easy',
+    questions: 15,
+    duration: 5,
+    sections: [
+      { name: 'Computer Knowledge', questions: 15 },
+    ],
+    description: 'Quick practice on computer fundamentals and basic IT concepts.',
+    isBookmarked: false,
+    isPopular: false,
+    isPremium: false,
+    color: '#8b5cf6', // Purple color
+    image: '/images/tests/computer-bg.jpg',
+    featured: false,
+    accuracy: 80,
+    cutoff: 50
   }
 ];
 
@@ -221,13 +205,15 @@ const mockExams = [
 
 export default function Tests() {
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
+  const user = useAuthState();
   const [activeTab, setActiveTab] = useState(0);
   const [bookmarkedExams, setBookmarkedExams] = useState<string[]>(
     // Initialize with any exams that are marked as bookmarked in the mock data
     mockExams.filter(exam => exam.isBookmarked).map(exam => exam.id)
   );
-  const [featuredExam, setFeaturedExam] = useState(
+  const [featuredExam] = useState(
     // Find a featured and premium exam for the highlight section
     mockExams.find(exam => exam.featured && exam.isPremium) || mockExams[0]
   );
@@ -237,26 +223,71 @@ export default function Tests() {
   // Tabs for filtering exam types
   const tabs = [
     { label: 'All Tests', icon: <SchoolIcon fontSize="small" /> },
-    { label: 'Mock Tests', icon: <PlayArrowIcon fontSize="small" /> },
-    { label: 'Sectional Tests', icon: <BarChartIcon fontSize="small" /> },
-    { label: 'Previous Year', icon: <HistoryIcon fontSize="small" /> },
-    { 
-      label: 'Bookmarked', 
-      icon: <BookmarkIcon fontSize="small" />,
-      count: bookmarkedExams.length
-    }
+    { label: 'Full Mock', icon: <PlayArrowIcon fontSize="small" /> },
+    { label: 'Sectional', icon: <BarChartIcon fontSize="small" /> },
+    { label: 'Topic-Wise', icon: <WorkspacePremiumIcon fontSize="small" /> }
   ];
   
-  // Query for loading exams (using mock data for now)
-  const { data: exams, isLoading } = useQuery({
-    queryKey: ['exams', bookmarkedExams],
+  // Query for loading AI-generated tests from Firestore
+  const { data: aiGeneratedTests } = useQuery({
+    queryKey: ['ai-tests', user?.uid],
     queryFn: async () => {
-      // In a real app, this would fetch from Firebase
-      // For now, return mock data with updated bookmark status
-      return mockExams.map(exam => ({
+      if (!user) return [];
+      
+      const testsRef = collection(db, 'tests');
+      const q = query(
+        testsRef,
+        where('status', '==', 'active'),
+        orderBy('createdAt', 'desc'),
+        limit(20)
+      );
+      
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          id: doc.id,
+          title: data.title || 'AI Generated Test',
+          description: data.description || 'AI-generated test questions',
+          category: data.templateId?.toUpperCase() || 'CUSTOM',
+          subcategory: data.templateId || 'General',
+          type: 'Mock Test',
+          questions: data.totalQuestions || 0,
+          duration: data.durationMinutes || 60,
+          difficulty: data.difficulty === 'easy' ? 'Easy' : 
+                      data.difficulty === 'hard' ? 'Hard' : 'Medium',
+          sections: data.sections || [],
+          isBookmarked: false,
+          isPopular: false,
+          isPremium: false,
+          featured: false,
+          attemptsCount: 0,
+          rating: 0,
+          reviews: 0,
+          lastUpdated: data.createdAt?.toDate?.()?.toISOString().split('T')[0] || new Date().toISOString().split('T')[0],
+          color: theme.palette.primary.main,
+          image: '',
+          accuracy: 0,
+          cutoff: 0
+        };
+      });
+    },
+    enabled: !!user,
+  });
+  
+  // Query for loading exams (combining mock data with AI-generated tests)
+  const { data: exams, isLoading } = useQuery({
+    queryKey: ['exams', bookmarkedExams, aiGeneratedTests],
+    queryFn: async () => {
+      // Combine mock data with AI-generated tests
+      const mockData = mockExams.map(exam => ({
         ...exam,
         isBookmarked: bookmarkedExams.includes(exam.id)
       }));
+      
+      const aiTests = aiGeneratedTests || [];
+      
+      return [...aiTests, ...mockData];
     },
     initialData: mockExams.map(exam => ({
       ...exam,
@@ -267,10 +298,9 @@ export default function Tests() {
   // Filter exams based on active tab
   const filteredExams = exams.filter(exam => {
     if (activeTab === 0) return true; // All tests
-    if (activeTab === 1) return exam.type === 'Mock Test';
-    if (activeTab === 2) return exam.type === 'Sectional';
-    if (activeTab === 3) return exam.type === 'Previous Year';
-    if (activeTab === 4) return exam.isBookmarked || bookmarkedExams.includes(exam.id);
+    if (activeTab === 1) return exam.type === 'Mock Test'; // Full Mock
+    if (activeTab === 2) return exam.type === 'Sectional'; // Sectional
+    if (activeTab === 3) return exam.type === 'Topic-Wise'; // Topic-Wise
     return true;
   });
 
@@ -384,9 +414,183 @@ export default function Tests() {
     return new Date(dateString).toLocaleDateString('en-US', options);
   };
 
-  // Start an exam
+  // State for mock test generation
+  const [generatingTestForExam, setGeneratingTestForExam] = useState<string | null>(null);
+  const [showInstructions, setShowInstructions] = useState(false);
+  const [generatedTestData, setGeneratedTestData] = useState<any>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+
+  // Map exam titles to API exam names
+  const getExamApiName = (examTitle: string) => {
+    if (examTitle.includes('SSC CGL')) return 'SSC Combined Graduate Level';
+    if (examTitle.includes('SSC CHSL')) return 'SSC CHSL';
+    if (examTitle.includes('Railway') || examTitle.includes('RRB')) return 'Railway RRB NTPC';
+    if (examTitle.includes('Bank PO') || examTitle.includes('IBPS PO')) return 'IBPS PO Prelims';
+    if (examTitle.includes('Bank Clerk') || examTitle.includes('SBI Clerk')) return 'SBI Clerk Prelims';
+    return 'SSC Combined Graduate Level'; // default
+  };
+
+  // Get subject from exam subcategory
+  const getSubjectFromExam = (exam: any) => {
+    if (exam.subcategory === 'Reasoning') return 'Reasoning';
+    if (exam.subcategory === 'Quantitative Aptitude') return 'Quantitative Aptitude';
+    if (exam.subcategory === 'English Language') return 'English Language';
+    if (exam.subcategory === 'Computer Knowledge') return 'Computer Knowledge';
+    return exam.subcategory;
+  };
+
+  // Mutation to generate full mock test
+  const generateMockMutation = useMutation({
+    mutationFn: async (exam: any) => {
+      const examApiName = getExamApiName(exam.title);
+      const difficulty = exam.difficulty === 'Easy' ? 'easy' : exam.difficulty === 'Hard' ? 'hard' : 'moderate';
+
+      const response = await axios.post(
+        'https://examhub-2.onrender.com/api/v2/generate-full-mock',
+        {
+          exam: examApiName,
+          difficulty: difficulty,
+        },
+        {
+          timeout: 600000, // 10 minute timeout
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      return response.data;
+    },
+    onSuccess: (data) => {
+      // Clear any existing quiz data first
+      sessionStorage.removeItem('quickQuiz');
+      sessionStorage.removeItem('fullMockTest');
+      sessionStorage.removeItem('sectionalMockTest');
+      sessionStorage.removeItem('topicWiseMockTest');
+      
+      // Store test data in sessionStorage
+      sessionStorage.setItem('fullMockTest', JSON.stringify(data.test));
+      setGeneratedTestData(data.test);
+      setGeneratingTestForExam(null);
+
+      // Show instructions modal
+      setShowInstructions(true);
+    },
+    onError: (error: any) => {
+      console.error('Full mock generation failed:', error);
+
+      let errorMessage = 'Unable to generate full mock test. Please try again.';
+
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. Server may be waking up. Please try again in 30 seconds.';
+      } else if (error.response?.status === 503) {
+        errorMessage = 'Service is starting up. Please wait 30 seconds and try again.';
+      } else if (error.response) {
+        errorMessage = error.response?.data?.message || `Server error: ${error.response.statusText}`;
+      } else if (error.request) {
+        errorMessage = 'Cannot reach the server. Please check your connection.';
+      }
+
+      setTestError(errorMessage);
+      setGeneratingTestForExam(null);
+    },
+  });
+
+  // Mutation to generate sectional mock test
+  const generateSectionalMutation = useMutation({
+    mutationFn: async (exam: any) => {
+      const examApiName = getExamApiName(exam.title);
+      const subject = getSubjectFromExam(exam);
+      const difficulty = exam.difficulty === 'Easy' ? 'easy' : exam.difficulty === 'Hard' ? 'hard' : 'moderate';
+      const numQuestions = exam.questions || 30;
+
+      const response = await axios.post(
+        'https://examhub-2.onrender.com/api/v2/generate-sectional-mock',
+        {
+          exam: examApiName,
+          subject: subject,
+          numQuestions: numQuestions,
+          difficulty: difficulty,
+        },
+        {
+          timeout: 300000, // 5 minute timeout
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      return response.data;
+    },
+    onSuccess: (data) => {
+      // Clear any existing quiz data first
+      sessionStorage.removeItem('quickQuiz');
+      sessionStorage.removeItem('fullMockTest');
+      sessionStorage.removeItem('sectionalMockTest');
+      sessionStorage.removeItem('topicWiseMockTest');
+      
+      // Store test data in sessionStorage
+      sessionStorage.setItem('sectionalMockTest', JSON.stringify(data.test));
+      setGeneratedTestData(data.test);
+      setGeneratingTestForExam(null);
+
+      // Show instructions modal
+      setShowInstructions(true);
+    },
+    onError: (error: any) => {
+      console.error('Sectional mock generation failed:', error);
+
+      let errorMessage = 'Unable to generate sectional test. Please try again.';
+
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        errorMessage = 'Request timed out. Server may be waking up. Please try again in 30 seconds.';
+      } else if (error.response?.status === 503) {
+        errorMessage = 'Service is starting up. Please wait 30 seconds and try again.';
+      } else if (error.response) {
+        errorMessage = error.response?.data?.message || `Server error: ${error.response.statusText}`;
+      } else if (error.request) {
+        errorMessage = 'Cannot reach the server. Please check your connection.';
+      }
+
+      setTestError(errorMessage);
+      setGeneratingTestForExam(null);
+    },
+  });
+
+  // Start an exam - generate full mock test or sectional test
   const startExam = (examId: string) => {
-    navigate(`/tests/${examId}/attempt/new`);
+    const exam = exams.find(e => e.id === examId);
+    if (!exam) return;
+    
+    setTestError(null);
+    setGeneratingTestForExam(examId);
+    
+    // Check if it's a sectional test or full mock
+    if (exam.type === 'Sectional') {
+      generateSectionalMutation.mutate(exam);
+    } else if (exam.type === 'Mock Test') {
+      generateMockMutation.mutate(exam);
+    } else {
+      // For other types, just navigate (fallback)
+      setGeneratingTestForExam(null);
+      navigate(`/tests/${examId}`);
+    }
+  };
+
+  const handleConfirmStart = () => {
+    setShowInstructions(false);
+    
+    // Check which type of test was generated and get the stored data
+    const fullMockTest = sessionStorage.getItem('fullMockTest');
+    const sectionalMockTest = sessionStorage.getItem('sectionalMockTest');
+    
+    if (fullMockTest) {
+      const test = JSON.parse(fullMockTest);
+      navigate(`/quick-quiz/${test.id}`);
+    } else if (sectionalMockTest) {
+      const test = JSON.parse(sectionalMockTest);
+      navigate(`/quick-quiz/${test.id}`);
+    }
   };
 
   // View exam details
@@ -650,76 +854,6 @@ export default function Tests() {
                   alignItems: 'center', 
                   justifyContent: 'center' 
                 }}>
-                  <Box sx={{ 
-                    position: 'relative',
-                    width: '100%', 
-                    height: '100%', 
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                  }}>
-                    <Box sx={{
-                      width: 200,
-                      height: 200,
-                      borderRadius: '50%',
-                      background: 'rgba(255,255,255,0.1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column'
-                    }}>
-                      <Typography variant="h4" fontWeight="700" color="#ffffff">
-                        {featuredExam.attemptsCount.toLocaleString()}+
-                      </Typography>
-                      <Typography variant="body2" color="#ffffff" sx={{ opacity: 0.8 }}>
-                        Students Attempted
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ 
-                      position: 'absolute',
-                      top: '20%',
-                      right: '15%',
-                      bgcolor: 'rgba(255,255,255,0.2)',
-                      borderRadius: '50%',
-                      p: 1,
-                      width: 80,
-                      height: 80,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column'
-                    }}>
-                      <Typography variant="h6" fontWeight="700" color="#ffffff">
-                        {featuredExam.cutoff}
-                      </Typography>
-                      <Typography variant="caption" color="#ffffff" sx={{ opacity: 0.8 }}>
-                        Cutoff
-                      </Typography>
-                    </Box>
-                    
-                    <Box sx={{ 
-                      position: 'absolute',
-                      bottom: '15%',
-                      left: '15%',
-                      bgcolor: 'rgba(255,255,255,0.2)',
-                      borderRadius: '50%',
-                      p: 1,
-                      width: 90,
-                      height: 90,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexDirection: 'column'
-                    }}>
-                      <Typography variant="h6" fontWeight="700" color="#ffffff">
-                        {featuredExam.accuracy}%
-                      </Typography>
-                      <Typography variant="caption" color="#ffffff" sx={{ opacity: 0.8 }}>
-                        Avg. Accuracy
-                      </Typography>
-                    </Box>
-                  </Box>
                 </Grid>
               </Grid>
             </Paper>
@@ -794,13 +928,6 @@ export default function Tests() {
                       {tab.icon}
                       <Box sx={{ ml: 1 }}>
                         {tab.label}
-                        {tab.count !== undefined && tab.count > 0 && (
-                          <Badge 
-                            badgeContent={tab.count} 
-                            color="primary" 
-                            sx={{ ml: 1 }}
-                          />
-                        )}
                       </Box>
                     </Box>
                   } 
@@ -810,13 +937,15 @@ export default function Tests() {
           </Paper>
         </Box>
 
-        {/* Exams Grid */}
-        {isLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}>
-            <CircularProgress size={60} />
-          </Box>
-        ) : filteredExams.length > 0 ? (
-          <Grid container spacing={3}>
+        {/* Content based on active tab */}
+        {activeTab === 0 ? (
+          // AI Mock Tests - Show exam cards
+          isLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}>
+              <CircularProgress size={60} />
+            </Box>
+          ) : filteredExams.length > 0 ? (
+            <Grid container spacing={3}>
             {filteredExams.map(exam => {
               const difficultyInfo = getDifficultyInfo(exam.difficulty, theme);
               const testTypeInfo = getTestTypeInfo(exam.type, theme);
@@ -964,41 +1093,12 @@ export default function Tests() {
                         {exam.description}
                       </Typography>
                       
-                      {/* Exam Stats */}
-                      <Grid container spacing={2} sx={{ mb: 3 }}>
-                        <Grid item xs={6}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}>
-                            <Rating 
-                              value={userRating || exam.rating} 
-                              precision={0.5} 
-                              size="small" 
-                              onChange={(_, newValue) => rateExam(exam.id, newValue)}
-                              sx={{ mr: 1 }}
-                            />
-                            <Typography variant="body2" color="text.secondary">
-                              {exam.rating}
-                            </Typography>
-                          </Box>
-                          <Typography variant="caption" color="text.secondary">
-                            {exam.reviews} reviews
-                          </Typography>
-                        </Grid>
-                        <Grid item xs={6} sx={{ textAlign: 'right' }}>
-                          <Typography variant="body2" fontWeight={500}>
-                            {exam.attemptsCount.toLocaleString()}+ attempts
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Last updated: {formatDate(exam.lastUpdated)}
-                          </Typography>
-                        </Grid>
-                      </Grid>
-                      
                       {/* Sections */}
                       <Typography variant="body2" fontWeight="medium" gutterBottom>
                         Sections:
                       </Typography>
                       <Stack direction="row" spacing={1} flexWrap="wrap">
-                        {exam.sections.map((section, index) => (
+                        {exam.sections.map((section: any, index: number) => (
                           <Chip
                             key={index}
                             label={`${section.name}`}
@@ -1031,7 +1131,8 @@ export default function Tests() {
                         variant="contained"
                         size="medium"
                         onClick={() => startExam(exam.id)}
-                        endIcon={<PlayArrowIcon />}
+                        disabled={generatingTestForExam === exam.id}
+                        endIcon={generatingTestForExam === exam.id ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />}
                         sx={{ 
                           px: 3,
                           bgcolor: exam.color || theme.palette.primary.main,
@@ -1040,7 +1141,7 @@ export default function Tests() {
                           }
                         }}
                       >
-                        Start Test
+                        {generatingTestForExam === exam.id ? 'Generating...' : 'Start Test'}
                       </Button>
                     </CardActions>
                   </Card>
@@ -1072,7 +1173,118 @@ export default function Tests() {
               View All Tests
             </Button>
           </Paper>
+        )
+        ) : activeTab === 1 ? (
+          // Full Mock component
+          <FullMock />
+        ) : activeTab === 2 ? (
+          // Sectional component
+          <SectionalMock />
+        ) : activeTab === 3 ? (
+          // Topic-Wise component
+          <TopicWiseMock />
+        ) : null}
+
+        {/* Error Alert */}
+        {testError && (
+          <Alert 
+            severity="error" 
+            onClose={() => setTestError(null)}
+            sx={{ mt: 3 }}
+          >
+            {testError}
+          </Alert>
         )}
+
+        {/* Instructions Dialog */}
+        <Dialog 
+          open={showInstructions} 
+          onClose={() => setShowInstructions(false)}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle sx={{ bgcolor: alpha(theme.palette.primary.main, 0.1), fontWeight: 600 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <InfoIcon color="primary" />
+              Test Instructions
+            </Box>
+          </DialogTitle>
+          <DialogContent sx={{ mt: 2 }}>
+            <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+              📋 General Instructions
+            </Typography>
+            <List dense>
+              <ListItem>
+                <ListItemText primary="• Read each question carefully before selecting an answer" />
+              </ListItem>
+              <ListItem>
+                <ListItemText primary="• You can navigate between questions using the question palette" />
+              </ListItem>
+              <ListItem>
+                <ListItemText primary="• Keep track of the timer and manage your time wisely" />
+              </ListItem>
+              <ListItem>
+                <ListItemText primary="• Click 'Submit' when you're done to see your results" />
+              </ListItem>
+              <ListItem>
+                <ListItemText primary="• You can review your answers and see detailed explanations after submission" />
+              </ListItem>
+            </List>
+
+            <Divider sx={{ my: 2 }} />
+
+            <Typography variant="h6" gutterBottom>
+              📊 Marking Scheme
+            </Typography>
+            <List dense>
+              <ListItem>
+                <CheckIcon sx={{ color: 'success.main', mr: 1 }} />
+                <ListItemText 
+                  primary="Correct Answer: +2 marks" 
+                  primaryTypographyProps={{ fontWeight: 500 }}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <CheckIcon sx={{ color: 'error.main' }} />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Wrong Answer: -0.5 marks (Negative Marking)" 
+                  primaryTypographyProps={{ fontWeight: 500 }}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemIcon>
+                  <InfoIcon color="info" />
+                </ListItemIcon>
+                <ListItemText 
+                  primary="Unattempted: 0 marks" 
+                  primaryTypographyProps={{ fontWeight: 500 }}
+                />
+              </ListItem>
+            </List>
+
+            <Alert severity="info" sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Pro Tip:</strong> Answer only when you're confident to avoid negative marking!
+              </Typography>
+            </Alert>
+          </DialogContent>
+          <DialogActions sx={{ p: 3 }}>
+            <Button onClick={() => setShowInstructions(false)} color="inherit">
+              Cancel
+            </Button>
+            <Button 
+              variant="contained" 
+              onClick={handleConfirmStart}
+              size="large"
+              sx={{ px: 4 }}
+              endIcon={<PlayArrowIcon />}
+            >
+              Start Test
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Container>
     </Box>
   );

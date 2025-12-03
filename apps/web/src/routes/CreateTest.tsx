@@ -21,11 +21,22 @@ import {
   Step,
   StepLabel,
   SelectChangeEvent,
+  Alert,
+  CircularProgress,
+  List,
+  ListItem,
+  ListItemText,
+  IconButton,
 } from '@mui/material';
 import { useGenerateQuestions } from '@/lib/functions';
 import { aiGenerationSchema } from '@/lib/validation';
 import FormDialog from '@/components/common/FormDialog';
 import { z } from 'zod';
+import { collection, addDoc, Timestamp } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { useAuthState } from '@/lib/auth';
+import DeleteIcon from '@mui/icons-material/Delete';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 
 // Mock exam templates
 const examTemplates = [
@@ -102,6 +113,7 @@ const topicsBySection: Record<string, string[]> = {
 
 export default function CreateTest() {
   const navigate = useNavigate();
+  const user = useAuthState();
   const generateQuestionsMutation = useGenerateQuestions();
   
   // State for the test creation wizard
@@ -116,11 +128,15 @@ export default function CreateTest() {
     difficulty: 'medium' as 'easy' | 'medium' | 'hard',
   });
   
+  // State for tracking generated questions per section
+  const [sectionQuestions, setSectionQuestions] = useState<Record<string, string[]>>({});
+  
   // State for AI question generation dialog
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
   const [generationSection, setGenerationSection] = useState('');
   const [generationTopic, setGenerationTopic] = useState('');
   const [generationCount, setGenerationCount] = useState(10);
+  const [generationSuccess, setGenerationSuccess] = useState(false);
   
   // Validation for the current step
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -193,18 +209,43 @@ export default function CreateTest() {
   // Handle creating the test
   const handleCreateTest = async () => {
     try {
-      // In a real app, this would create the test in Firestore
-      // For now, we'll just log it and navigate
-      console.log('Creating test:', {
+      if (!user) {
+        throw new Error('You must be logged in to create a test');
+      }
+
+      // Collect all question IDs from all sections
+      const allQuestionIds = Object.values(sectionQuestions).flat();
+      
+      if (allQuestionIds.length === 0) {
+        setErrors({ questions: 'Please generate at least one question for the test' });
+        return;
+      }
+
+      // Create the test in Firestore
+      const testData = {
         ...testDetails,
-        template: selectedTemplate,
-        sections: selectedTemplateData?.sections,
-      });
+        templateId: selectedTemplate,
+        templateName: selectedTemplateData?.name,
+        questionIds: allQuestionIds,
+        sections: selectedTemplateData?.sections.map(section => ({
+          name: section.name,
+          questionCount: (sectionQuestions[section.name] || []).length,
+          questionIds: sectionQuestions[section.name] || []
+        })),
+        createdAt: Timestamp.now(),
+        createdBy: user.uid,
+        status: 'active',
+        totalQuestions: allQuestionIds.length
+      };
+      
+      const testRef = await addDoc(collection(db, 'tests'), testData);
+      console.log('Test created with ID:', testRef.id);
       
       // Navigate to the tests page after creation
       navigate('/tests');
     } catch (error) {
       console.error('Error creating test:', error);
+      setErrors({ submit: error instanceof Error ? error.message : 'Failed to create test' });
     }
   };
   
@@ -220,33 +261,38 @@ export default function CreateTest() {
   const handleGenerateQuestions = async () => {
     try {
       // Validate input
-      const schema = aiGenerationSchema;
-      schema.parse({
-        topic: generationTopic,
-        count: generationCount,
-        difficulty: testDetails.difficulty,
-      });
+      if (!generationTopic) {
+        setErrors({ topic: 'Please select a topic' });
+        return;
+      }
       
-      // Generate questions
-      await generateQuestionsMutation.mutateAsync({
+      setGenerationSuccess(false);
+      
+      // Generate questions using the AI backend
+      const result = await generateQuestionsMutation.mutateAsync({
         topic: generationTopic,
         count: generationCount,
         difficulty: testDetails.difficulty,
         examType: selectedTemplate || 'general',
       });
       
-      // Close dialog on success
-      setGenerationDialogOpen(false);
+      // Store the question IDs for this section
+      setSectionQuestions(prev => ({
+        ...prev,
+        [generationSection]: [...(prev[generationSection] || []), ...result.questionIds]
+      }));
+      
+      setGenerationSuccess(true);
+      
+      // Close dialog after 2 seconds
+      setTimeout(() => {
+        setGenerationDialogOpen(false);
+        setGenerationSuccess(false);
+      }, 2000);
+      
     } catch (error) {
       console.error('Error generating questions:', error);
-      if (error instanceof z.ZodError) {
-        const newErrors: Record<string, string> = {};
-        error.errors.forEach(err => {
-          const field = err.path[0] as string;
-          newErrors[field] = err.message;
-        });
-        setErrors(newErrors);
-      }
+      setErrors({ generation: error instanceof Error ? error.message : 'Failed to generate questions' });
     }
   };
   
@@ -419,37 +465,69 @@ export default function CreateTest() {
             <Typography variant="h6" gutterBottom>
               Configure test sections and questions
             </Typography>
-            {selectedTemplateData?.sections.map((section, index) => (
-              <Paper key={section.name} sx={{ p: 3, mb: 3 }}>
-                <Typography variant="subtitle1" fontWeight="bold">
-                  Section {index + 1}: {section.name}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  {section.count} questions
-                </Typography>
-                
-                <Divider sx={{ my: 2 }} />
-                
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" gutterBottom>
-                    Generate AI questions for this section or upload your own.
-                  </Typography>
-                  <Button 
-                    variant="outlined" 
-                    color="primary"
-                    onClick={() => handleOpenGenerationDialog(section.name)}
-                  >
-                    Generate AI Questions
-                  </Button>
-                </Box>
-                
-                <Box>
-                  <Typography variant="body2" color="text.secondary">
-                    0 of {section.count} questions added
-                  </Typography>
-                </Box>
-              </Paper>
-            ))}
+            {errors.questions && (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {errors.questions}
+              </Alert>
+            )}
+            {selectedTemplateData?.sections.map((section, index) => {
+              const questionCount = (sectionQuestions[section.name] || []).length;
+              const isComplete = questionCount >= section.count;
+              
+              return (
+                <Paper key={section.name} sx={{ p: 3, mb: 3 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight="bold">
+                        Section {index + 1}: {section.name}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Target: {section.count} questions
+                      </Typography>
+                    </Box>
+                    {isComplete && (
+                      <Chip 
+                        icon={<CheckCircleIcon />} 
+                        label="Complete" 
+                        color="success" 
+                        size="small" 
+                      />
+                    )}
+                  </Box>
+                  
+                  <Divider sx={{ my: 2 }} />
+                  
+                  <Box sx={{ mb: 2 }}>
+                    <Typography variant="body2" gutterBottom>
+                      Generate AI questions for this section
+                    </Typography>
+                    <Button 
+                      variant="outlined" 
+                      color="primary"
+                      onClick={() => handleOpenGenerationDialog(section.name)}
+                      disabled={generateQuestionsMutation.isPending}
+                    >
+                      {generateQuestionsMutation.isPending && generationSection === section.name
+                        ? 'Generating...'
+                        : 'Generate AI Questions'}
+                    </Button>
+                  </Box>
+                  
+                  <Box>
+                    <Typography variant="body2" fontWeight="bold" gutterBottom>
+                      Generated Questions: {questionCount} of {section.count}
+                    </Typography>
+                    {questionCount > 0 && (
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          {questionCount} questions have been generated and saved
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                </Paper>
+              );
+            })}
           </Box>
         );
         
@@ -596,41 +674,70 @@ export default function CreateTest() {
       {/* AI Question Generation Dialog */}
       <FormDialog
         open={generationDialogOpen}
-        onClose={() => setGenerationDialogOpen(false)}
+        onClose={() => {
+          setGenerationDialogOpen(false);
+          setGenerationSuccess(false);
+          setErrors({});
+        }}
         title={`Generate Questions for ${generationSection}`}
-        submitLabel="Generate"
+        submitLabel={generationSuccess ? "Success!" : "Generate"}
         onSubmit={handleGenerateQuestions}
         isSubmitting={generateQuestionsMutation.isPending}
       >
         <Box sx={{ width: '100%' }}>
-          <FormControl fullWidth sx={{ mb: 3 }}>
-            <InputLabel id="topic-label">Topic</InputLabel>
-            <Select
-              labelId="topic-label"
-              value={generationTopic}
-              label="Topic"
-              onChange={(e: SelectChangeEvent<string>) => setGenerationTopic(e.target.value)}
-            >
-              {topicsBySection[generationSection]?.map(topic => (
-                <MenuItem key={topic} value={topic}>{topic}</MenuItem>
-              ))}
-            </Select>
-            <FormHelperText>Select a specific topic for better question quality</FormHelperText>
-          </FormControl>
-          
-          <TextField
-            fullWidth
-            type="number"
-            label="Number of Questions"
-            value={generationCount}
-            onChange={e => setGenerationCount(parseInt(e.target.value) || 5)}
-            InputProps={{ inputProps: { min: 1, max: 20 } }}
-            sx={{ mb: 2 }}
-          />
-          
-          <Typography variant="body2" color="text.secondary">
-            Questions will be generated at {testDetails.difficulty} difficulty level for {selectedTemplateData?.name}.
-          </Typography>
+          {generationSuccess ? (
+            <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mb: 2 }}>
+              Questions generated successfully!
+            </Alert>
+          ) : (
+            <>
+              {errors.generation && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {errors.generation}
+                </Alert>
+              )}
+              
+              <FormControl fullWidth sx={{ mb: 3 }} error={!!errors.topic}>
+                <InputLabel id="topic-label">Topic</InputLabel>
+                <Select
+                  labelId="topic-label"
+                  value={generationTopic}
+                  label="Topic"
+                  onChange={(e: SelectChangeEvent<string>) => {
+                    setGenerationTopic(e.target.value);
+                    if (errors.topic) {
+                      const newErrors = { ...errors };
+                      delete newErrors.topic;
+                      setErrors(newErrors);
+                    }
+                  }}
+                >
+                  {topicsBySection[generationSection]?.map(topic => (
+                    <MenuItem key={topic} value={topic}>{topic}</MenuItem>
+                  ))}
+                </Select>
+                {errors.topic ? (
+                  <FormHelperText>{errors.topic}</FormHelperText>
+                ) : (
+                  <FormHelperText>Select a specific topic for better question quality</FormHelperText>
+                )}
+              </FormControl>
+              
+              <TextField
+                fullWidth
+                type="number"
+                label="Number of Questions"
+                value={generationCount}
+                onChange={e => setGenerationCount(parseInt(e.target.value) || 5)}
+                InputProps={{ inputProps: { min: 1, max: 20 } }}
+                sx={{ mb: 2 }}
+              />
+              
+              <Typography variant="body2" color="text.secondary">
+                Questions will be generated at {testDetails.difficulty} difficulty level for {selectedTemplateData?.name}.
+              </Typography>
+            </>
+          )}
         </Box>
       </FormDialog>
     </Container>

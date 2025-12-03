@@ -9,11 +9,15 @@ import {
   Badge,
 } from '@mui/material';
 import { useAuthState } from '@/lib/auth';
+import { useGuestMode } from '@/lib/guestContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import SchoolIcon from '@mui/icons-material/School';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import QuizIcon from '@mui/icons-material/Quiz';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
+import NewspaperIcon from '@mui/icons-material/Newspaper';
 
 export default function SideNav() {
   const location = useLocation();
@@ -21,13 +25,23 @@ export default function SideNav() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  // Define navigation items with proper icons
-  const navItems = [
+  const { isGuestMode } = useGuestMode();
+
+  const guestNavItems = [
+    { label: 'Quick Quiz', path: '/quick-quiz', icon: <QuizIcon /> },
+    { label: 'Full Mock', path: '/full-mock', icon: <AssignmentIcon /> },
+    { label: 'Sectional', path: '/sectional-mock', icon: <MenuBookIcon /> },
+    { label: 'Topic-wise', path: '/topic-wise-mock', icon: <NewspaperIcon /> },
+  ];
+
+  const regularNavItems = [
     { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
     { label: 'Practice', path: '/practice', icon: <SchoolIcon /> },
     { label: 'Tests', path: '/tests', icon: <AssignmentIcon /> },
     { label: 'Leaderboard', path: '/leaderboard', icon: <EmojiEventsIcon /> },
   ];
+
+  const navItems = isGuestMode ? guestNavItems : regularNavItems;
 
   // Only show mobile bottom navigation on mobile devices and when user is logged in
   if (!isMobile || !user) {

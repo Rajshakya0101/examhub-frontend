@@ -1,7 +1,7 @@
 import { CallableRequest } from 'firebase-functions/v2/https';
 import { db, handleError, validateAuth } from '../utils/firebase';
 import { examSchema } from '../shared/schema';
-import { generateQuestions } from '../services/openai';
+import { generateQuestions } from '../services/gemini';
 import * as logger from 'firebase-functions/logger';
 
 type GeneratePaperRequest = {
