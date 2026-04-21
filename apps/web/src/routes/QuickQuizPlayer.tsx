@@ -264,7 +264,7 @@ export default function QuickQuizPlayer() {
         submittedAt: Timestamp.now(),
         timeSpentSec: timeSpentSec,
         score: {
-          raw: scoreData.correct,
+          raw: scoreData.rawMarks,
           percentage: scoreData.percentage,
         },
         questionStats: {
@@ -281,7 +281,7 @@ export default function QuickQuizPlayer() {
   };
 
   const calculateScore = () => {
-    if (!quizData) return { correct: 0, incorrect: 0, unanswered: 0, percentage: 0 };
+    if (!quizData) return { correct: 0, incorrect: 0, unanswered: 0, rawMarks: 0, percentage: 0 };
 
     let correct = 0;
     let incorrect = 0;
@@ -298,9 +298,19 @@ export default function QuickQuizPlayer() {
       }
     });
 
-    const percentage = (correct / quizData.questions.length) * 100;
+    // Marking scheme:
+    // Correct Answer: +2 marks
+    // Wrong Answer: -0.5 marks
+    // Unattempted: 0 marks
+    const MARKS_PER_CORRECT = 2;
+    const MARKS_PER_WRONG = -0.5;
+    const MARKS_PER_UNATTEMPTED = 0;
 
-    return { correct, incorrect, unanswered, percentage };
+    const totalMarks = (correct * MARKS_PER_CORRECT) + (incorrect * MARKS_PER_WRONG) + (unanswered * MARKS_PER_UNATTEMPTED);
+    const maxMarks = quizData.questions.length * MARKS_PER_CORRECT;
+    const percentage = (totalMarks / maxMarks) * 100;
+
+    return { correct, incorrect, unanswered, rawMarks: totalMarks, percentage };
   };
 
   const formatTime = (seconds: number) => {
@@ -330,6 +340,9 @@ export default function QuickQuizPlayer() {
         <Paper sx={{ p: 4, mb: 4, textAlign: 'center', borderRadius: 3 }}>
           <Typography variant="h3" fontWeight={700} gutterBottom>
             {score.percentage.toFixed(1)}%
+          </Typography>
+          <Typography variant="h6" color="text.secondary" gutterBottom>
+            Marks: {score.rawMarks.toFixed(1)} / {(quizData.questions.length * 2).toFixed(1)}
           </Typography>
           <Typography variant="h5" color="text.secondary" gutterBottom>
             {score.percentage >= 80 ? '🎉 Excellent!' : score.percentage >= 60 ? '👍 Good Job!' : '💪 Keep Practicing!'}

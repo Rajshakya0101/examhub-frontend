@@ -9,6 +9,10 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID: string;
   readonly VITE_SENTRY_DSN: string;
   readonly VITE_GA_ID: string;
+  readonly VITE_QUIZ_API_BASE_URL?: string;
+  readonly VITE_MATHEMATICS_QUIZ_API_PATH?: string;
+  readonly VITE_MATHEMATICS_QUIZ_API_ENDPOINT?: string;
+  readonly VITE_MATHEMATICS_QUIZ_SEED?: string;
 }
 
 interface ImportMeta {
