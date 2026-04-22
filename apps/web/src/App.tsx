@@ -11,7 +11,6 @@ import FirebaseAuthErrorHandler from './components/common/FirebaseAuthErrorHandl
 import { AuthProvider } from './lib/authContext';
 import { GuestProvider } from './lib/guestContext';
 import { NotificationProvider } from './lib/notifications/notificationContext';
-import SessionTimeoutHandler from './components/common/SessionTimeoutHandler';
 
 // Import route components
 import Landing from './routes/Landing';
@@ -172,7 +171,6 @@ export default function App() {
             <GuestProvider>
               <NotificationProvider>
                 <FirebaseAuthErrorHandler>
-                  <SessionTimeoutHandler />
                   <RouterProvider router={router} />
                 </FirebaseAuthErrorHandler>
               </NotificationProvider>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Box, 
   Container, 
@@ -35,13 +35,13 @@ import {
   History as HistoryIcon,
   Check as CheckIcon
 } from '@mui/icons-material';
-import { useAuthState } from '../lib/auth';
+import { useAuth, useAuthState } from '../lib/auth';
 import { useQuery } from '@tanstack/react-query';
 import { useUserStatsSummary } from '@/hooks/useUserStats';
 import { useAchievements } from '@/hooks/useAchievements';
 import { useUserRank } from '@/hooks/useLeaderboard';
 import { db } from '@/lib/firebase';
-import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
 import type { Attempt } from '@/lib/models';
 
 // Create extended attempt type for profile display
@@ -52,17 +52,21 @@ interface TestAttempt extends Attempt {
 
 export default function Profile() {
   const user = useAuthState();
+  const { updateUserProfile } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editedProfile, setEditedProfile] = useState({
+  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [profileNeedsCompletion, setProfileNeedsCompletion] = useState(false);
+  const [profileSnapshot, setProfileSnapshot] = useState({
     displayName: user?.displayName || '',
     email: user?.email || '',
-    bio: 'Aspiring Bank PO candidate preparing for SBI and IBPS exams. Currently focused on improving quantitative aptitude.',
-    phone: '9876543210',
-    location: 'Mumbai, India',
-    education: 'B.Com, Mumbai University',
+    bio: '',
+    phone: '',
+    location: '',
+    education: '',
   });
+  const [editedProfile, setEditedProfile] = useState(profileSnapshot);
   const [error, setError] = useState('');
   const theme = useTheme();
   
@@ -98,21 +102,62 @@ export default function Profile() {
   
   const isLoading = statsLoading || achievementsLoading || rankLoading || attemptsLoading;
 
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user?.uid) {
+        setLoadingProfile(false);
+        return;
+      }
+
+      setLoadingProfile(true);
+
+      try {
+        const userRef = doc(db, 'users', user.uid);
+        const snapshot = await getDoc(userRef);
+        const data = snapshot.exists() ? snapshot.data() : {};
+
+        const nextProfile = {
+          displayName: (data.displayName as string | undefined) || user.displayName || '',
+          email: (data.email as string | undefined) || user.email || '',
+          bio: (data.bio as string | undefined) || '',
+          phone: (data.phone as string | undefined) || '',
+          location: (data.location as string | undefined) || '',
+          education: (data.education as string | undefined) || '',
+        };
+
+        setProfileSnapshot(nextProfile);
+        setEditedProfile(nextProfile);
+
+        const incomplete = !snapshot.exists()
+          || !nextProfile.bio.trim()
+          || !nextProfile.phone.trim()
+          || !nextProfile.location.trim()
+          || !nextProfile.education.trim();
+
+        setProfileNeedsCompletion(incomplete);
+
+        if (incomplete) {
+          setEditing(true);
+          setError('Please complete your profile details.');
+        }
+      } catch (loadError) {
+        console.error('Error loading profile:', loadError);
+        setError('Unable to load profile details.');
+      } finally {
+        setLoadingProfile(false);
+      }
+    };
+
+    loadProfile();
+  }, [user?.uid, user?.displayName, user?.email]);
+
   const handleEditProfile = () => {
     setEditing(true);
   };
 
   const handleCancelEdit = () => {
     setEditing(false);
-    // Reset form to original values
-    setEditedProfile({
-      displayName: user?.displayName || '',
-      email: user?.email || '',
-      bio: 'Aspiring Bank PO candidate preparing for SBI and IBPS exams. Currently focused on improving quantitative aptitude.',
-      phone: '9876543210',
-      location: 'Mumbai, India',
-      education: 'B.Com, Mumbai University',
-    });
+    setEditedProfile(profileSnapshot);
     setError('');
   };
 
@@ -128,17 +173,27 @@ export default function Profile() {
         return;
       }
 
-      // Mock update for display purposes
-      // In a real app, this would call a function to update Firebase Auth profile
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // In real app, you'd also update the user's Firestore document with additional fields
-      // await updateDoc(doc(db, 'users', user.uid), {
-      //   bio: editedProfile.bio,
-      //   phone: editedProfile.phone,
-      //   location: editedProfile.location,
-      //   education: editedProfile.education,
-      // });
+      if (!user?.uid) {
+        throw new Error('User not authenticated');
+      }
+
+      await updateUserProfile({ displayName: editedProfile.displayName });
+
+      const userRef = doc(db, 'users', user.uid);
+      await setDoc(userRef, {
+        displayName: editedProfile.displayName,
+        email: editedProfile.email,
+        bio: editedProfile.bio,
+        phone: editedProfile.phone,
+        location: editedProfile.location,
+        education: editedProfile.education,
+        profileComplete: true,
+        updatedAt: new Date(),
+      }, { merge: true });
+
+      const savedProfile = { ...editedProfile };
+      setProfileSnapshot(savedProfile);
+      setProfileNeedsCompletion(false);
       
       setEditing(false);
     } catch (err) {
@@ -164,6 +219,12 @@ export default function Profile() {
           My Profile
         </Typography>
       </Box>
+
+      {profileNeedsCompletion && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Your profile is incomplete. Please update your personal details so we can personalize your dashboard.
+        </Alert>
+      )}
       
       <Grid container spacing={4}>
         {/* Left column - Profile Info */}
@@ -273,6 +334,12 @@ export default function Profile() {
             {error && !error.includes('Name') && (
               <Alert severity="error" sx={{ mb: 2 }}>
                 {error}
+              </Alert>
+            )}
+
+            {loadingProfile && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Loading your profile details...
               </Alert>
             )}
             

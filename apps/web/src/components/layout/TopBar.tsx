@@ -104,6 +104,9 @@ export default function TopBar() {
               alignItems: 'center', 
               textDecoration: 'none', 
               color: 'inherit',
+              '&:hover': {
+                textDecoration: 'none',
+              },
               mr: 2
             }}
           >
@@ -118,7 +121,8 @@ export default function TopBar() {
               justifyContent: 'center',
               color: '#fff',
               fontWeight: 700,
-              fontSize: 16
+              fontSize: 16,
+              decoration: 'none'
             }}>
               EH
             </Box>
@@ -127,7 +131,8 @@ export default function TopBar() {
               noWrap
               sx={{ 
                 fontWeight: 700,
-                display: { xs: 'none', sm: 'block' }
+                display: { xs: 'none', sm: 'block' },
+                decoration: 'none',
               }}
             >
               ExamHub

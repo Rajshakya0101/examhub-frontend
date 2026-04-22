@@ -31,13 +31,9 @@ gtag('js', new Date());
 gtag('config', import.meta.env.VITE_GA_ID);
 
 // Import AuthProvider
-import { AuthProvider } from './lib/authContext';
-
 // Create and render root
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <AuthProvider>
-      <App />
-    </AuthProvider>
+    <App />
   </React.StrictMode>
 );

@@ -1,5 +1,5 @@
 import { initializeApp, getApp, getApps, FirebaseOptions } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, getDocs } from 'firebase/firestore';
 
 interface FirebaseConfig extends FirebaseOptions {
@@ -64,12 +64,30 @@ export const verifyFirebaseConfig = async () => {
     
     console.log('Firebase app initialized successfully');
     
-    // Test auth
+    // Test auth without mutating the current session
     const auth = getAuth(app);
     console.log('Testing Firebase Auth connection...');
-    
+
     try {
-      await signInAnonymously(auth);
+      await new Promise<void>((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('Firebase auth check timed out'));
+        }, 4000);
+
+        const unsubscribe = onAuthStateChanged(
+          auth,
+          () => {
+            clearTimeout(timeoutId);
+            unsubscribe();
+            resolve();
+          },
+          (error) => {
+            clearTimeout(timeoutId);
+            unsubscribe();
+            reject(error);
+          }
+        );
+      });
       console.log('✓ Firebase Auth connection verified successfully');
     } catch (error: any) {
       console.error('Firebase Auth verification failed:', error);

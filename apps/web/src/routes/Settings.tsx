@@ -49,8 +49,6 @@ export default function Settings() {
   const [notifications, setNotifications] = useState(true);
   const [sounds, setSounds] = useState(true);
   const [deleteAccountDialog, setDeleteAccountDialog] = useState(false);
-  const [password, setPassword] = useState('');
-  const [passwordError, setPasswordError] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
 
   // Handle theme change
@@ -101,8 +99,7 @@ export default function Settings() {
   // Handle delete account
   const handleDeleteAccount = async () => {
     try {
-      // In a real app, this would verify the password and delete the account
-      // await deleteUserAccount(password);
+      // In a real app, this would call a backend endpoint to delete user data.
       
       setSnackbar({
         open: true,
@@ -114,7 +111,11 @@ export default function Settings() {
       navigate('/signin');
     } catch (error) {
       console.error('Error deleting account:', error);
-      setPasswordError('Incorrect password. Please try again.');
+      setSnackbar({
+        open: true,
+        message: 'Failed to delete account. Please try again.',
+        severity: 'error'
+      });
     }
   };
 
@@ -600,29 +601,9 @@ export default function Settings() {
           }}>
             Warning: This action cannot be undone. All your data, including test history and achievements, will be permanently deleted.
           </DialogContentText>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Confirm with your password"
-            type="password"
-            fullWidth
-            variant="outlined"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            error={!!passwordError}
-            helperText={passwordError}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                borderRadius: 2,
-                '&.Mui-focused': {
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: 'error.main',
-                    borderWidth: 2,
-                  },
-                },
-              },
-            }}
-          />
+          <DialogContentText>
+            Are you sure you want to delete this account?
+          </DialogContentText>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
           <Button 
@@ -639,7 +620,6 @@ export default function Settings() {
             onClick={handleDeleteAccount} 
             color="error" 
             variant="contained"
-            disabled={!password}
             sx={{
               px: 3,
               py: 1,

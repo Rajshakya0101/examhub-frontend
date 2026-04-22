@@ -7,6 +7,11 @@ export interface UserProfile {
   displayName: string;
   email: string;
   photoURL?: string;
+  bio?: string;
+  phone?: string;
+  location?: string;
+  education?: string;
+  profileComplete?: boolean;
   createdAt: Timestamp;
   lastLoginAt: Timestamp;
   preferences?: {

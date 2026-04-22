@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, LinearProgress } from '@mui/material';
 import useSessionTimeout from '../../hooks/useSessionTimeout';
-import { signOut } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
+import { signOut } from '@/lib/auth';
 
 // Convert ms to minutes and seconds for display
 function formatTimeRemaining(ms: number): string {
@@ -35,7 +34,7 @@ export default function SessionTimeoutHandler() {
   useEffect(() => {
     if (sessionExpired) {
       // Perform sign out when session expires
-      signOut(auth).catch(error => {
+      signOut().catch(error => {
         console.error("Error signing out on session expiration:", error);
       });
     }
@@ -94,7 +93,7 @@ export default function SessionTimeoutHandler() {
         <Button onClick={handleExtendSession} color="primary" variant="contained">
           Continue Session
         </Button>
-        <Button onClick={() => signOut(auth).catch(error => console.error("Error signing out:", error))} color="error">
+        <Button onClick={() => signOut().catch(error => console.error("Error signing out:", error))} color="error">
           Logout
         </Button>
       </DialogActions>

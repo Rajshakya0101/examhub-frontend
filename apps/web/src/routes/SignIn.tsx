@@ -17,7 +17,7 @@ import {
   useTheme,
   alpha
 } from '@mui/material';
-import { signInWithGoogle } from '../lib/auth';
+import { useAuth } from '../lib/auth';
 import GoogleIcon from '@mui/icons-material/Google';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import LoginIcon from '@mui/icons-material/Login';
@@ -31,10 +31,12 @@ export default function SignIn() {
   const location = useLocation();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [error, setError] = useState('');
+  const { signInWithGoogle } = useAuth();
   const { enableGuestMode } = useGuestMode();
 
   // Get redirect path from location state or default to dashboard
-  const from = (location.state?.from?.pathname || '/dashboard') as string;
+  const fromPath = location.state?.from?.pathname as string | undefined;
+  const from = fromPath && fromPath !== '/signin' ? fromPath : '/dashboard';
 
   const handleGuestAccess = () => {
     enableGuestMode();
