@@ -1,15 +1,13 @@
 import { useState } from 'react';
-import { Link as RouterLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link as RouterLink, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   AppBar,
-  Avatar,
   Box,
   Button,
   Container,
   IconButton,
   Menu,
   MenuItem,
-  Stack,
   Toolbar,
   Tooltip,
   Typography,
@@ -18,22 +16,32 @@ import {
 } from '@mui/material';
 import { ThemeToggle } from './ThemeToggle';
 import { useAuthState, signOut } from '@/lib/auth';
-import DashboardIcon from '@mui/icons-material/Dashboard';
 import MenuIcon from '@mui/icons-material/Menu';
-import SchoolIcon from '@mui/icons-material/School';
-import AssignmentIcon from '@mui/icons-material/Assignment';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import SettingsIcon from '@mui/icons-material/Settings';
 import LogoutIcon from '@mui/icons-material/Logout';
 import NotificationPanel from '../notifications/NotificationPanel';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import SchoolIcon from '@mui/icons-material/School';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import HistoryIcon from '@mui/icons-material/History';
+
+const regularNavItems = [
+  { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon sx={{ pointerEvents: 'none' }} /> },
+  { label: 'Practice', path: '/practice', icon: <SchoolIcon sx={{ pointerEvents: 'none' }} /> },
+  { label: 'Tests', path: '/tests', icon: <AssignmentIcon sx={{ pointerEvents: 'none' }} /> },
+  { label: 'Attempts', path: '/attempts', icon: <HistoryIcon sx={{ pointerEvents: 'none' }} /> },
+  { label: 'Leaderboard', path: '/leaderboard', icon: <EmojiEventsIcon sx={{ pointerEvents: 'none' }} /> },
+];
 
 export default function TopBar() {
   const user = useAuthState();
   const theme = useTheme();
-  const location = useLocation();
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isHomePage = location.pathname === '/';
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
   
@@ -58,14 +66,6 @@ export default function TopBar() {
     handleCloseMenu();
     navigate('/');
   };
-  
-  // Navigation items with icons
-  const navItems = [
-    { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon fontSize="small" /> },
-    { label: 'Practice', path: '/practice', icon: <SchoolIcon fontSize="small" /> },
-    { label: 'AI Mock Tests', path: '/tests', icon: <AssignmentIcon fontSize="small" /> },
-    { label: 'Leaderboard', path: '/leaderboard', icon: <EmojiEventsIcon fontSize="small" /> },
-  ];
 
   return (
     <AppBar 
@@ -84,12 +84,25 @@ export default function TopBar() {
           {/* Mobile menu button */}
           {isMobile && (
             <IconButton
-              size="large"
-              edge="start"
-              color="inherit"
               aria-label="menu"
               onClick={handleOpenMobileMenu}
-              sx={{ mr: 1 }}
+              sx={{
+                position: 'relative',
+                mr: 1,
+                width: 40,
+                height: 40,
+                borderRadius: 1,
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: 'inherit',
+                  background: 'transparent',
+                },
+                '& svg, & path, & g, & use': {
+                  pointerEvents: 'none',
+                },
+              }}
             >
               <MenuIcon />
             </IconButton>
@@ -122,7 +135,8 @@ export default function TopBar() {
               color: '#fff',
               fontWeight: 700,
               fontSize: 16,
-              decoration: 'none'
+              decoration: 'none',
+              pointerEvents: 'none',
             }}>
               EH
             </Box>
@@ -133,36 +147,64 @@ export default function TopBar() {
                 fontWeight: 700,
                 display: { xs: 'none', sm: 'block' },
                 decoration: 'none',
+                pointerEvents: 'none',
               }}
             >
               ExamHub
             </Typography>
           </Box>
 
-          {/* Navigation Links - Desktop */}
-          {!isMobile && user && (
-            <Stack direction="row" spacing={1} sx={{ flexGrow: 1 }}>
-              {navItems.map((item) => (
-                <Button 
+          {user && isHomePage && !isMobile && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.75,
+                ml: 2,
+                flex: 1,
+                overflowX: 'auto',
+                scrollbarWidth: 'none',
+                '&::-webkit-scrollbar': {
+                  display: 'none',
+                },
+              }}
+            >
+              {regularNavItems.map((item) => (
+                <Button
                   key={item.path}
-                  component={RouterLink} 
+                  component={NavLink}
                   to={item.path}
                   startIcon={item.icon}
-                  color={location.pathname === item.path ? 'primary' : 'inherit'}
-                  variant={location.pathname === item.path ? 'contained' : 'text'}
-                  sx={{ 
+                  sx={{
+                    position: 'relative',
+                    minWidth: 'auto',
+                    px: 1.5,
+                    py: 1,
                     borderRadius: 2,
-                    px: 2,
-                    py: 0.5
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    color: 'text.secondary',
+                    '&::after': {
+                      content: '""',
+                      position: 'absolute',
+                      inset: 0,
+                      borderRadius: 'inherit',
+                      background: 'transparent',
+                    },
+                    '& .MuiButton-startIcon, & .MuiSvgIcon-root, & svg, & path, & g, & use': {
+                      pointerEvents: 'none',
+                    },
+                    '&.active': {
+                      color: 'primary.main',
+                      bgcolor: 'rgba(37, 99, 235, 0.08)',
+                    },
                   }}
                 >
                   {item.label}
                 </Button>
               ))}
-            </Stack>
+            </Box>
           )}
-
-          {/* Mock Test Buttons removed - accessible via Tests page */}
 
           {/* Mobile Navigation Menu */}
           <Menu
@@ -177,19 +219,6 @@ export default function TopBar() {
               }
             }}
           >
-            {user && navItems.map((item) => (
-              <MenuItem 
-                key={item.path} 
-                component={RouterLink} 
-                to={item.path} 
-                onClick={handleCloseMobileMenu}
-                selected={location.pathname === item.path}
-                sx={{ py: 1.5 }}
-              >
-                <Box sx={{ mr: 2, color: 'primary.main' }}>{item.icon}</Box>
-                <Typography>{item.label}</Typography>
-              </MenuItem>
-            ))}
             {!user && (
               <MenuItem 
                 component={RouterLink} 
@@ -219,34 +248,54 @@ export default function TopBar() {
             {user ? (
               <>
                 <Tooltip title={user.displayName || user.email || 'User account'}>
-                  <IconButton 
+                  <IconButton
                     onClick={handleOpenMenu} 
                     sx={{ 
-                      p: 0.5,
+                      position: 'relative',
+                      width: 40,
+                      height: 40,
                       border: `2px solid ${theme.palette.primary.main}`,
+                      borderRadius: '50%',
                       transition: 'all 0.2s ease-in-out',
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      p: 0,
+                      '&::after': {
+                        content: '""',
+                        position: 'absolute',
+                        inset: 0,
+                        borderRadius: 'inherit',
+                        background: 'transparent',
+                      },
+                      '& svg, & path, & g, & use': {
+                        pointerEvents: 'none',
+                      },
                       '&:hover': {
                         bgcolor: 'rgba(37, 99, 235, 0.1)'
-                      }
+                      },
                     }}
                   >
-                    {user.photoURL ? (
-                      <Avatar 
-                        src={user.photoURL}
-                        alt={user.displayName || 'User'}
-                        sx={{ width: 32, height: 32 }}
-                      />
-                    ) : (
-                      <Avatar 
-                        sx={{ 
-                          width: 32, 
-                          height: 32, 
-                          bgcolor: theme.palette.primary.main 
-                        }}
-                      >
-                        {(user.displayName || user.email || '?').charAt(0).toUpperCase()}
-                      </Avatar>
-                    )}
+                    <Box
+                      sx={{
+                        width: '100%',
+                        height: '100%',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: '#fff',
+                        fontWeight: 700,
+                        fontSize: 14,
+                        backgroundColor: theme.palette.primary.main,
+                        backgroundImage: user.photoURL ? `url(${user.photoURL})` : 'none',
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        backgroundRepeat: 'no-repeat',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      {!user.photoURL && (user.displayName || user.email || '?').charAt(0).toUpperCase()}
+                    </Box>
                   </IconButton>
                 </Tooltip>
                 <Menu

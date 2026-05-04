@@ -585,11 +585,11 @@ export default function Tests() {
     const sectionalMockTest = sessionStorage.getItem('sectionalMockTest');
     
     if (fullMockTest) {
-      const test = JSON.parse(fullMockTest);
-      navigate(`/quick-quiz/${test.id}`);
+      // Redirect the user to the Full Mock section page where the generated test is available
+      navigate('/full-mock');
     } else if (sectionalMockTest) {
-      const test = JSON.parse(sectionalMockTest);
-      navigate(`/quick-quiz/${test.id}`);
+      // Redirect the user to the Sectional Mock section page
+      navigate('/sectional-mock');
     }
   };
 

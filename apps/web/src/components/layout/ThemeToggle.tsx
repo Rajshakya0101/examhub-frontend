@@ -51,10 +51,30 @@ export function ThemeToggle(props: ThemeToggleProps) {
         {...props}
         onClick={handleToggle} 
         aria-label="Toggle theme"
-        color="inherit"
-        size="medium"
+        sx={{
+          position: 'relative',
+          width: 40,
+          height: 40,
+          borderRadius: 1,
+          '&::after': {
+            content: '""',
+            position: 'absolute',
+            inset: 0,
+            borderRadius: 'inherit',
+            background: 'transparent',
+          },
+          '& svg, & path, & g, & use': {
+            pointerEvents: 'none',
+          },
+          ...props.sx,
+        }}
       >
-        <ThemeIcon />
+        <ThemeIcon
+          sx={{
+            fontSize: 24,
+            pointerEvents: 'none',
+          }}
+        />
       </IconButton>
     </Tooltip>
   );

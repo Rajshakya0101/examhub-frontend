@@ -128,16 +128,21 @@ export async function submitAttempt(attemptId: string, timeLeftSec: number, ques
     }
   });
   
-  const score = (correctCount / questions.length) * 100;
-  
+  const percentage = (correctCount / questions.length) * 100;
+  const rawMarks = correctCount * 2; // 2 marks per correct answer
+
   await updateDoc(attemptRef, {
     status: 'completed',
     completedAt: Timestamp.now(),
     timeLeftSec,
-    score,
+    score: {
+      raw: rawMarks,
+      percentage: Math.round(percentage * 100) / 100
+    },
     correctCount,
     attemptedCount,
-    totalQuestions: questions.length
+    totalQuestions: questions.length,
+    maxMarks: questions.length * 2,
   });
 }
 
@@ -241,7 +246,7 @@ export async function getUserStats(userId: string): Promise<UserStats | null> {
 /**
  * Calculate and update streak based on activity
  */
-function calculateStreak(lastActivityDate: string, currentStreak: number): { newStreak: number; maintainedStreak: boolean } {
+export function calculateStreak(lastActivityDate: string, currentStreak: number): { newStreak: number; maintainedStreak: boolean } {
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
   
@@ -281,31 +286,25 @@ export async function updateUserStatsAfterTest(
   
   const currentStats = statsDoc.exists() ? statsDoc.data() as UserStats : null;
   const today = new Date().toISOString().split('T')[0];
-  
-  // Calculate new streak
-  const { newStreak, maintainedStreak } = currentStats 
+  const { newStreak, maintainedStreak } = currentStats
     ? calculateStreak(currentStats.lastActivityDate, currentStats.currentStreak)
     : { newStreak: 1, maintainedStreak: false };
-  
-  // Calculate new totals
-  const newQuestionsAnswered = (currentStats?.questionsAnswered || 0) + testData.questionsAnswered;
-  const newCorrectAnswers = (currentStats?.correctAnswers || 0) + testData.correctAnswers;
-  const newTotalTimeSpent = (currentStats?.totalTimeSpentSec || 0) + testData.timeSpentSec;
-  
-  // Calculate accuracy and avg time
+
+  const newQuestionsAnswered = (currentStats?.questionsAnswered || 0) + Math.max(0, testData.questionsAnswered);
+  const newCorrectAnswers = (currentStats?.correctAnswers || 0) + Math.max(0, testData.correctAnswers);
+  const newTotalTimeSpent = (currentStats?.totalTimeSpentSec || 0) + Math.max(0, testData.timeSpentSec);
+
   const accuracy = newQuestionsAnswered > 0 ? (newCorrectAnswers / newQuestionsAnswered) * 100 : 0;
   const avgTimePerQuestionSec = newQuestionsAnswered > 0 ? newTotalTimeSpent / newQuestionsAnswered : 0;
-  
-  // Update recent scores (keep last 10)
-  const recentScores = currentStats?.recentScores || [];
-  recentScores.push({
-    date: Timestamp.now(),
-    score: testData.score,
-    testId: testData.testId
-  });
-  
-  // Keep only last 10 scores
-  const updatedRecentScores = recentScores.slice(-10);
+
+  const updatedRecentScores = [
+    ...(currentStats?.recentScores || []),
+    {
+      date: Timestamp.now(),
+      score: testData.score,
+      testId: testData.testId,
+    }
+  ].slice(-10);
   
   // Update the document
   await updateDoc(statsRef, {
@@ -400,6 +399,7 @@ export interface AttemptData {
   userId: string;
   examId: string;
   examTitle: string;
+  testType?: 'quick-quiz' | 'quick-practice' | 'sectional-mock' | 'full-mock' | 'topic-wise-mock';
   status: 'completed' | 'abandoned';
   startedAt: Timestamp;
   submittedAt: Timestamp;
@@ -425,8 +425,11 @@ export async function saveTestAttempt(attemptData: Omit<AttemptData, 'id'>): Pro
   const attemptsRef = collection(db, 'attempts');
   const attemptDoc = doc(attemptsRef);
   
+  const maxMarks = attemptData.maxMarks ?? (attemptData.questionStats?.total ? attemptData.questionStats.total * 2 : undefined);
+
   await setDoc(attemptDoc, {
     ...attemptData,
+    maxMarks,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });

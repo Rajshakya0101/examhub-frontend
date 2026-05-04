@@ -45,6 +45,78 @@ import {
 } from '@mui/icons-material';
 import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
+import { fetchCurrentAffairsQuiz } from '@/lib/api/currentAffairsApi';
+
+const MATHEMATICS_QUIZ_API_ENDPOINT =
+  import.meta.env.VITE_MATHEMATICS_QUIZ_API_ENDPOINT ||
+  'https://pranova-new-mcq-api.hf.space/generate_mock';
+
+interface HfMathQuestion {
+  section: string;
+  question: string;
+  options: {
+    A?: string;
+    B?: string;
+    C?: string;
+    D?: string;
+  };
+  answer?: string;
+}
+
+interface HfMathResponse {
+  count: number;
+  seed: number;
+  mix: string;
+  questions: HfMathQuestion[];
+}
+
+const buildHfMix = (section: 'quant' | 'reasoning' | 'english' | 'polity', count: number) => {
+  const counts = {
+    quant: 0,
+    reasoning: 0,
+    english: 0,
+    polity: 0,
+  };
+
+  counts[section] = count;
+
+  return `quant:${counts.quant},reasoning:${counts.reasoning},english:${counts.english},polity:${counts.polity}`;
+};
+
+const generateUniqueSeed = () => Math.floor(Math.random() * 1_000_000_000);
+
+const createRequestNonce = () => `${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`;
+
+const mapMathResponseToQuiz = (preset: typeof quizPresets[0], data: HfMathResponse): QuizResponse => {
+  const questions = (data.questions || []).slice(0, preset.numQuestions).map((q, index) => ({
+    id: `math-${index + 1}`,
+    questionText: q.question,
+    optionA: q.options?.A || '',
+    optionB: q.options?.B || '',
+    optionC: q.options?.C || '',
+    optionD: q.options?.D || '',
+    correctOption: q.answer || '',
+    explanation: '',
+    timeToSolveSeconds: 60,
+  }));
+
+  if (questions.length === 0) {
+    throw new Error('Mathematics API returned no questions');
+  }
+
+  return {
+    message: 'Quiz generated successfully',
+    test: {
+      id: `math-quick-${Date.now()}`,
+      title: `${preset.subject} Quick Quiz`,
+      subject: preset.subject,
+      difficulty: preset.difficulty,
+      numQuestions: questions.length,
+      durationMinutes: Math.min(8, questions.length),
+      questions,
+    },
+  };
+};
 
 // Quiz presets matching the API
 const quizPresets = [
@@ -55,14 +127,17 @@ const quizPresets = [
     icon: <PublicIcon fontSize="large" />,
     color: '#2563eb',
     description: 'Latest news, events, and government schemes',
+    apiProvider: 'current-affairs',
   },
   {
     subject: 'Mathematics',
     difficulty: 'hard',
-    numQuestions: 10,
+    numQuestions: 15,
     icon: <CalculateIcon fontSize="large" />,
     color: '#7c3aed',
     description: 'Challenging mathematical problems',
+    apiProvider: 'hf-mcq',
+    hfSection: 'quant',
   },
   {
     subject: 'General Knowledge',
@@ -75,10 +150,12 @@ const quizPresets = [
   {
     subject: 'English',
     difficulty: 'moderate',
-    numQuestions: 12,
+    numQuestions: 15,
     icon: <LanguageIcon fontSize="large" />,
     color: '#f59e0b',
     description: 'Grammar, vocabulary, and comprehension',
+    apiProvider: 'hf-mcq',
+    hfSection: 'english',
   },
   {
     subject: 'Reasoning',
@@ -87,14 +164,8 @@ const quizPresets = [
     icon: <PsychologyIcon fontSize="large" />,
     color: '#ec4899',
     description: 'Logical reasoning and analytical ability',
-  },
-  {
-    subject: 'Hindi',
-    difficulty: 'moderate',
-    numQuestions: 10,
-    icon: <TranslateIcon fontSize="large" />,
-    color: '#14b8a6',
-    description: 'Hindi grammar and comprehension',
+    apiProvider: 'hf-mcq',
+    hfSection: 'reasoning',
   },
   {
     subject: 'Computer Knowledge',
@@ -154,6 +225,48 @@ export default function Practice() {
   // Mutation to generate quiz - Direct API call
   const generateQuizMutation = useMutation({
     mutationFn: async (preset: typeof quizPresets[0]) => {
+      if (preset.apiProvider === 'current-affairs') {
+        return await fetchCurrentAffairsQuiz(preset.numQuestions);
+      }
+
+      if (preset.apiProvider === 'hf-mcq') {
+        const seed = generateUniqueSeed();
+        const requestNonce = createRequestNonce();
+        const section = preset.hfSection || 'quant';
+        const payload = {
+          count: preset.numQuestions,
+          mix: buildHfMix(section, preset.numQuestions),
+          seed,
+          include_answers: true,
+        };
+
+        console.log('Calling HF MCQ API with:', {
+          endpoint: MATHEMATICS_QUIZ_API_ENDPOINT,
+          requestNonce,
+          ...payload,
+        });
+
+        const response = await axios.post<HfMathResponse>(
+          MATHEMATICS_QUIZ_API_ENDPOINT,
+          payload,
+          {
+            timeout: 240000,
+            params: {
+              _: requestNonce,
+            },
+            headers: {
+              'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
+            },
+          }
+        );
+
+        const normalized = mapMathResponseToQuiz(preset, response.data);
+        console.log('HF MCQ API Response (normalized):', normalized);
+        return normalized;
+      }
+
       console.log('Calling external API directly with:', {
         subject: preset.subject,
         difficulty: preset.difficulty,
@@ -200,6 +313,7 @@ export default function Practice() {
       
       // Store quiz data in sessionStorage for the exam player
       sessionStorage.setItem('quickQuiz', JSON.stringify(data.test));
+      sessionStorage.setItem('quickQuizOrigin', 'practice');
       
       // Show instructions modal
       setShowInstructions(true);
@@ -498,39 +612,7 @@ export default function Practice() {
                       </Box>
                     </Box>
 
-                    {/* Difficulty Badge */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <Box
-                        sx={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 0.5,
-                          px: 1.5,
-                          py: 0.5,
-                          borderRadius: 1,
-                          bgcolor: alpha(getDifficultyColor(preset.difficulty), 0.1),
-                        }}
-                      >
-                        <Box
-                          sx={{
-                            width: 8,
-                            height: 8,
-                            borderRadius: '50%',
-                            bgcolor: getDifficultyColor(preset.difficulty),
-                          }}
-                        />
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: getDifficultyColor(preset.difficulty),
-                            fontWeight: 600,
-                            textTransform: 'capitalize'
-                          }}
-                        >
-                          {preset.difficulty} Difficulty
-                        </Typography>
-                      </Box>
-                    </Box>
+                    {/* Difficulty badge removed per request */}
 
                     {/* Topic Tags */}
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>

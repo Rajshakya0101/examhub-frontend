@@ -106,7 +106,7 @@ const ExamCard: React.FC<ExamCardProps> = ({
       </Box>
       
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={4}>
+        <Grid item xs={6}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <AccessTimeIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
             <Typography variant="body2" color="text.secondary">
@@ -114,19 +114,11 @@ const ExamCard: React.FC<ExamCardProps> = ({
             </Typography>
           </Box>
         </Grid>
-        <Grid item xs={4}>
+        <Grid item xs={6}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <ArticleIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
             <Typography variant="body2" color="text.secondary">
               {questions} Q
-            </Typography>
-          </Box>
-        </Grid>
-        <Grid item xs={4}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <BarChartIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
-              {difficulty}
             </Typography>
           </Box>
         </Grid>
@@ -183,12 +175,12 @@ const FeaturedExamsSection: React.FC = () => {
         </Box>
         
         <Grid container spacing={4}>
-          {exams.map((exam, index) => (
-            <Grid item key={index} xs={12} md={4}>
-              <ExamCard {...exam} />
-            </Grid>
-          ))}
-        </Grid>
+            {exams.map((exam, index) => (
+              <Grid item key={index} xs={12} md={4}>
+                <ExamCard {...exam} />
+              </Grid>
+            ))}
+          </Grid>
         
         <Box sx={{ mt: 6, textAlign: 'center' }}>
           <Button 

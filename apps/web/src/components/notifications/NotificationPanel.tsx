@@ -167,6 +167,16 @@ export default function NotificationPanel() {
           sx={{ 
             position: 'relative',
             transition: 'all 0.2s ease-in-out',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              inset: 0,
+              borderRadius: 'inherit',
+              background: 'transparent',
+            },
+            '& svg, & path, & g, & use': {
+              pointerEvents: 'none',
+            },
             '&:hover': {
               transform: 'translateY(-2px)',
               background: alpha(theme.palette.primary.main, 0.08),

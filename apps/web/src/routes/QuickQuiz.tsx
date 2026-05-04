@@ -45,6 +45,7 @@ import {
 } from '@mui/icons-material';
 import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
+import { fetchCurrentAffairsQuiz } from '@/lib/api/currentAffairsApi';
 
 const QUIZ_API_BASE_URL = import.meta.env.VITE_QUIZ_API_BASE_URL || 'https://examhub-2.onrender.com/api/v2';
 const DEFAULT_QUIZ_API_PATH = '/generate-quiz';
@@ -62,7 +63,7 @@ interface QuizPreset {
   description: string;
   apiPath?: string;
   apiSubject?: string;
-  apiProvider?: 'default' | 'hf-mcq';
+  apiProvider?: 'default' | 'hf-mcq' | 'current-affairs';
   apiEndpoint?: string;
   hfSection?: 'quant' | 'reasoning' | 'english' | 'polity';
 }
@@ -80,6 +81,7 @@ const quizPresets: QuizPreset[] = [
     icon: <PublicIcon fontSize="large" />,
     color: '#2563eb',
     description: 'Latest news, events, and government schemes',
+    apiProvider: 'current-affairs',
   },
   {
     subject: 'Mathematics',
@@ -124,14 +126,6 @@ const quizPresets: QuizPreset[] = [
     apiEndpoint: MATHEMATICS_QUIZ_API_ENDPOINT,
     apiSubject: 'Reasoning',
     hfSection: 'reasoning',
-  },
-  {
-    subject: 'Hindi',
-    difficulty: 'moderate',
-    numQuestions: FIXED_QUESTIONS_PER_SUBJECT,
-    icon: <TranslateIcon fontSize="large" />,
-    color: '#14b8a6',
-    description: 'Hindi grammar and comprehension',
   },
   {
     subject: 'Computer Knowledge',
@@ -271,6 +265,10 @@ export default function QuickQuiz() {
   // Mutation to generate quiz - Direct API call
   const generateQuizMutation = useMutation({
     mutationFn: async (preset: QuizPreset) => {
+      if (preset.apiProvider === 'current-affairs') {
+        return await fetchCurrentAffairsQuiz(preset.numQuestions);
+      }
+
       if (preset.apiProvider === 'hf-mcq') {
         const endpoint = preset.apiEndpoint || MATHEMATICS_QUIZ_API_ENDPOINT;
         const section = preset.hfSection || 'quant';
@@ -370,6 +368,7 @@ export default function QuickQuiz() {
       
       // Store quiz data in sessionStorage for the exam player
       sessionStorage.setItem('quickQuiz', JSON.stringify(data.test));
+      sessionStorage.setItem('quickQuizOrigin', 'quick-quiz');
       
       // Show instructions modal
       setShowInstructions(true);

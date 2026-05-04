@@ -2,59 +2,10 @@ import { createContext, useContext, useReducer, useEffect, ReactNode } from 'rea
 import { v4 as uuidv4 } from 'uuid';
 import { Notification, NotificationState } from './notificationTypes';
 
-// Initial mock notifications
-const mockNotifications: Notification[] = [
-  {
-    id: uuidv4(),
-    title: 'New test available',
-    message: 'SSC CGL 2023 Mock Test is now available. Practice now to improve your score!',
-    type: 'info',
-    isRead: false,
-    link: '/tests',
-    timestamp: new Date(Date.now() - 1000 * 60 * 5), // 5 minutes ago
-  },
-  {
-    id: uuidv4(),
-    title: 'Congratulations!',
-    message: 'You completed your daily practice goal. Keep up the good work!',
-    type: 'success',
-    isRead: false,
-    link: '/dashboard',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
-  },
-  {
-    id: uuidv4(),
-    title: 'Score Updated',
-    message: 'Your recent test results have been processed. Your rank has improved by 5 positions!',
-    type: 'success',
-    isRead: true,
-    link: '/leaderboard',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 3), // 3 hours ago
-  },
-  {
-    id: uuidv4(),
-    title: 'Reminder',
-    message: 'You have scheduled a mock test for Banking PO tomorrow at 10:00 AM.',
-    type: 'warning',
-    isRead: true,
-    link: '/calendar',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-  },
-  {
-    id: uuidv4(),
-    title: 'New Feature',
-    message: 'We\'ve added new practice questions for Quantitative Aptitude. Try them now!',
-    type: 'info',
-    isRead: true,
-    link: '/practice',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 48), // 2 days ago
-  }
-];
-
-// Initial state
+// Initial state - empty notifications (all data from database)
 const initialState: NotificationState = {
-  notifications: mockNotifications,
-  unreadCount: mockNotifications.filter(n => !n.isRead).length,
+  notifications: [],
+  unreadCount: 0,
   isOpen: false,
 };
 

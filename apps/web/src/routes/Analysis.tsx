@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -11,7 +11,13 @@ import {
   LinearProgress,
   Tabs,
   Tab,
+  Stack,
+  IconButton,
 } from '@mui/material';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CancelIcon from '@mui/icons-material/Cancel';
 import { useQuery } from '@tanstack/react-query';
 import { db } from '@/lib/firebase';
 import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
@@ -70,6 +76,7 @@ interface Attempt {
 export default function Analysis() {
   const { attemptId } = useParams<{ attemptId: string }>();
   const [tabValue, setTabValue] = useState(0);
+  const navigate = useNavigate();
 
   // Get attempt data
   const { data: attempt, isLoading: attemptLoading } = useQuery({
@@ -101,12 +108,19 @@ export default function Analysis() {
     queryFn: async () => {
       if (!attemptId) return [];
 
+      // Try older 'attempt_items' collection first
       const itemsRef = collection(db, `attempt_items/${attemptId}/items`);
-      const querySnap = await getDocs(itemsRef);
-      
-      return querySnap.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
+      let querySnap = await getDocs(itemsRef);
+
+      if (querySnap.empty) {
+        // Fallback: answers stored under attempts/{attemptId}/answers
+        const answersRef = collection(db, `attempts/${attemptId}/answers`);
+        querySnap = await getDocs(answersRef);
+      }
+
+      return querySnap.docs.map(d => ({
+        id: d.id,
+        ...d.data(),
       })) as AttemptItem[];
     },
     enabled: !!attemptId,
@@ -118,22 +132,35 @@ export default function Analysis() {
     queryFn: async () => {
       if (!attempt?.examId) return [];
 
-      // This would normally fetch the real questions by ID
-      // Mock data for demonstration
-      return Array(20).fill(0).map((_, idx) => ({
-        id: `q${idx + 1}`,
-        section: idx < 10 ? 'General Knowledge' : 'Current Affairs',
-        topic: idx % 2 === 0 ? 'History' : 'Geography',
-        stem: `This is question ${idx + 1}. What is the correct answer?`,
-        options: [
-          `Option A for question ${idx + 1}`,
-          `Option B for question ${idx + 1}`,
-          `Option C for question ${idx + 1}`,
-          `Option D for question ${idx + 1}`,
-        ],
-        correctIndex: idx % 4,
-        explanation: `Explanation for question ${idx + 1}. The correct answer is ${String.fromCharCode(65 + (idx % 4))} because...`,
-      })) as Question[];
+      // Fetch the test document to obtain question IDs
+      const testDoc = await getDoc(doc(db, 'tests', attempt.examId));
+      if (!testDoc.exists()) return [];
+
+      const testData: any = testDoc.data();
+      const questionIds: string[] = testData.questionIds || testData.questions || [];
+
+      if (!questionIds || questionIds.length === 0) return [];
+
+      // Fetch each question document
+      const questionsPromises = questionIds.map((qId: string) => getDoc(doc(db, 'questions', qId)));
+      const questionDocs = await Promise.all(questionsPromises);
+
+      const loaded = questionDocs
+        .filter(qDoc => qDoc.exists())
+        .map(qDoc => {
+          const qData: any = qDoc.data();
+          return {
+            id: qDoc.id,
+            section: qData.topic || qData.section || 'General',
+            topic: qData.topic || qData.subject || 'General',
+            stem: qData.stem || qData.question || qData.questionText || 'Question not available',
+            options: qData.options || qData.choices || [qData.optionA, qData.optionB, qData.optionC, qData.optionD].filter(Boolean),
+            correctIndex: qData.correctIndex ?? qData.correctOptionIndex ?? 0,
+            explanation: qData.explanation || qData.expl || '',
+          } as Question;
+        });
+
+      return loaded;
     },
     enabled: !!attempt?.examId,
   });
@@ -206,88 +233,242 @@ export default function Analysis() {
   if (attemptLoading || itemsLoading || questionsLoading) {
     return <LinearProgress />;
   }
-
   return (
     <Container>
       {/* Report Header */}
-      <Paper className="p-6 mb-6">
-        <Box className="flex justify-between items-center mb-4">
+      <Box className="mb-8">
+        <Box className="flex items-center gap-3 mb-6">
+          <IconButton 
+            aria-label="back" 
+            onClick={() => navigate(-1)}
+            sx={{
+              color: '#374151',
+              '&:hover': { backgroundColor: '#f3f4f6' }
+            }}
+          >
+            <ArrowBackIcon />
+          </IconButton>
           <Box>
-            <Typography variant="h4" className="font-bold">
-              Performance Report
+            <Typography variant="h4" sx={{ fontWeight: 700, color: '#111827' }}>
+              {attempt?.examTitle || attempt?.examId || 'Performance Report'}
             </Typography>
-            <Typography variant="subtitle1" color="text.secondary">
-              {attempt?.examId} - Attempted on {attempt ? formatTimestamp(attempt.submittedAt) : ''}
+            <Typography variant="body2" sx={{ color: '#6b7280', marginTop: '4px' }}>
+              Attempted on {attempt ? formatTimestamp(attempt.submittedAt) : ''}
             </Typography>
           </Box>
-          <Box className="text-right">
-            <Typography variant="h4" className="font-bold">
-              {attempt?.score?.raw || 0}/{stats.total}
+        </Box>
+
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography sx={{ fontSize: '2.5rem', fontWeight: 700, color: '#111827', lineHeight: 1 }}>
+              {attempt?.score?.raw != null ? `${attempt.score.raw}/${(stats.total || 0) * 2}` : '—'}
             </Typography>
             {attempt?.score?.percentile && (
-              <Typography variant="subtitle1" color="primary" className="font-medium">
+              <Typography variant="subtitle2" sx={{ color: '#3b82f6', fontWeight: 600, marginTop: '8px' }}>
                 {attempt.score.percentile} Percentile
               </Typography>
             )}
           </Box>
         </Box>
+      </Box>
 
-        <Divider className="my-4" />
-        
-        <Grid container spacing={3}>
-          <Grid item xs={6} sm={3}>
-            <Box>
-              <Typography variant="body2" color="text.secondary">
-                Total Questions
-              </Typography>
-              <Typography variant="h6" className="font-bold">
-                {stats.total}
-              </Typography>
+      {/* Stats Cards */}
+      <Grid container spacing={3} className="mb-10">
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper 
+            elevation={0}
+            className="rounded-xl"
+            sx={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#fafbfc',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                backgroundColor: '#f9fafb',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                borderColor: '#d1d5db',
+              }
+            }}
+          >
+            <Box
+              sx={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+                boxShadow: '0 4px 12px rgba(59, 130, 246, 0.3)'
+              }}
+            >
+              <HelpOutlineIcon sx={{ color: 'white', fontSize: 32 }} />
             </Box>
-          </Grid>
-          
-          <Grid item xs={6} sm={3}>
-            <Box>
-              <Typography variant="body2" color="text.secondary">
-                Correct
-              </Typography>
-              <Typography variant="h6" className="font-bold text-success">
-                {stats.correct}
-              </Typography>
-            </Box>
-          </Grid>
-          
-          <Grid item xs={6} sm={3}>
-            <Box>
-              <Typography variant="body2" color="text.secondary">
-                Incorrect
-              </Typography>
-              <Typography variant="h6" className="font-bold text-error">
-                {stats.incorrect}
-              </Typography>
-            </Box>
-          </Grid>
-          
-          <Grid item xs={6} sm={3}>
-            <Box>
-              <Typography variant="body2" color="text.secondary">
-                Unanswered
-              </Typography>
-              <Typography variant="h6" className="font-bold">
-                {stats.unanswered}
-              </Typography>
-            </Box>
-          </Grid>
+            <Typography 
+              sx={{ 
+                fontSize: '0.875rem', 
+                color: '#6b7280', 
+                fontWeight: 500,
+                marginBottom: '8px'
+              }}
+            >
+              Total Questions
+            </Typography>
+            <Typography sx={{ fontSize: '1.75rem', fontWeight: 700, color: '#111827' }}>
+              {stats.total}
+            </Typography>
+          </Paper>
         </Grid>
-
-        <Box className="mt-4 flex justify-end">
-          <Button variant="contained" color="primary">
-            Download PDF Report
-          </Button>
-        </Box>
-      </Paper>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper 
+            elevation={0}
+            className="rounded-xl"
+            sx={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#fafbfc',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                backgroundColor: '#f9fafb',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                borderColor: '#d1d5db',
+              }
+            }}
+          >
+            <Box
+              sx={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+                boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+              }}
+            >
+              <CheckCircleIcon sx={{ color: 'white', fontSize: 32 }} />
+            </Box>
+            <Typography 
+              sx={{ 
+                fontSize: '0.875rem', 
+                color: '#6b7280', 
+                fontWeight: 500,
+                marginBottom: '8px'
+              }}
+            >
+              Correct
+            </Typography>
+            <Typography sx={{ fontSize: '1.75rem', fontWeight: 700, color: '#111827' }}>
+              {stats.correct}
+            </Typography>
+          </Paper>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper 
+            elevation={0}
+            className="rounded-xl"
+            sx={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#fafbfc',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                backgroundColor: '#f9fafb',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                borderColor: '#d1d5db',
+              }
+            }}
+          >
+            <Box
+              sx={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+                boxShadow: '0 4px 12px rgba(239, 68, 68, 0.3)'
+              }}
+            >
+              <CancelIcon sx={{ color: 'white', fontSize: 32 }} />
+            </Box>
+            <Typography 
+              sx={{ 
+                fontSize: '0.875rem', 
+                color: '#6b7280', 
+                fontWeight: 500,
+                marginBottom: '8px'
+              }}
+            >
+              Incorrect
+            </Typography>
+            <Typography sx={{ fontSize: '1.75rem', fontWeight: 700, color: '#111827' }}>
+              {stats.incorrect}
+            </Typography>
+          </Paper>
+        </Grid>
+        
+        <Grid item xs={12} sm={6} md={3}>
+          <Paper 
+            elevation={0}
+            className="rounded-xl"
+            sx={{
+              padding: '24px 16px',
+              textAlign: 'center',
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#fafbfc',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                backgroundColor: '#f9fafb',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+                borderColor: '#d1d5db',
+              }
+            }}
+          >
+            <Box
+              sx={{
+                width: 64,
+                height: 64,
+                borderRadius: '50%',
+                background: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 12px',
+                boxShadow: '0 4px 12px rgba(107, 114, 128, 0.3)'
+              }}
+            >
+              <HelpOutlineIcon sx={{ color: 'white', fontSize: 32 }} />
+            </Box>
+            <Typography 
+              sx={{ 
+                fontSize: '0.875rem', 
+                color: '#6b7280', 
+                fontWeight: 500,
+                marginBottom: '8px'
+              }}
+            >
+              Unanswered
+            </Typography>
+            <Typography sx={{ fontSize: '1.75rem', fontWeight: 700, color: '#111827' }}>
+              {stats.unanswered}
+            </Typography>
+          </Paper>
+        </Grid>
+      </Grid>
 
       {/* Charts Section */}
+
       <Grid container spacing={4} className="mb-6">
         <Grid item xs={12} md={6}>
           <ChartCard title="Performance Summary" height={300}>

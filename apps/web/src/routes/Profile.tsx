@@ -40,7 +40,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useUserStatsSummary } from '@/hooks/useUserStats';
 import { useAchievements } from '@/hooks/useAchievements';
 import { useUserRank } from '@/hooks/useLeaderboard';
-import { db } from '@/lib/firebase';
+import { db, storage } from '@/lib/firebase';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { collection, query, where, orderBy, limit, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
 import type { Attempt } from '@/lib/models';
 
@@ -68,6 +69,9 @@ export default function Profile() {
   });
   const [editedProfile, setEditedProfile] = useState(profileSnapshot);
   const [error, setError] = useState('');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState('');
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const theme = useTheme();
   
   // Fetch real user data
@@ -265,17 +269,52 @@ export default function Profile() {
                 overlap="circular"
                 anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
                 badgeContent={
-                  editing ? (
+                  (
                     <Avatar sx={{ 
-                      width: 32, 
-                      height: 32, 
+                      width: 36, 
+                      height: 36, 
                       bgcolor: 'primary.main',
                       boxShadow: theme.shadows[3],
                       border: `2px solid ${theme.palette.background.paper}`,
+                      cursor: 'pointer',
                     }}>
-                      <EditIcon sx={{ fontSize: 16 }} />
+                      <label style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%' }}>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file || !user?.uid) return;
+                            setAvatarError('');
+                            // basic validation: max 3MB
+                            if (file.size > 3 * 1024 * 1024) {
+                              setAvatarError('Image too large (max 3MB)');
+                              return;
+                            }
+                            try {
+                              setUploadingAvatar(true);
+                              const ext = file.name.split('.').pop();
+                              const avatarPath = `users/${user.uid}/avatar_${Date.now()}.${ext}`;
+                              const sRef = storageRef(storage, avatarPath);
+                              await uploadBytes(sRef, file);
+                              const url = await getDownloadURL(sRef);
+                              await updateUserProfile({ photoURL: url });
+                            } catch (err) {
+                              console.error('Avatar upload failed', err);
+                              setAvatarError('Failed to upload avatar. Try again.');
+                            } finally {
+                              setUploadingAvatar(false);
+                              // clear input so same file can be reselected
+                              if (fileInputRef.current) fileInputRef.current.value = '';
+                            }
+                          }}
+                        />
+                        <EditIcon sx={{ fontSize: 16 }} />
+                      </label>
                     </Avatar>
-                  ) : null
+                  )
                 }
               >
                 <Avatar 
@@ -295,6 +334,16 @@ export default function Profile() {
                   {editedProfile.displayName?.charAt(0) || '?'}
                 </Avatar>
               </Badge>
+              {avatarError && (
+                <Typography color="error" variant="caption" sx={{ mt: 1 }}>
+                  {avatarError}
+                </Typography>
+              )}
+              {uploadingAvatar && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 1 }}>
+                  <CircularProgress size={20} />
+                </Box>
+              )}
               
               {editing ? (
                 <TextField

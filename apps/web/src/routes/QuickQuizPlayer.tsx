@@ -35,6 +35,7 @@ import {
 import { useUpdateUserStats } from '@/hooks/useUserStats';
 import { useUpdateLeaderboard } from '@/hooks/useLeaderboard';
 import { useAuthState } from '@/lib/auth';
+import { useQueryClient } from '@tanstack/react-query';
 import { saveTestAttempt, type Achievement } from '@/lib/firestore';
 import { Timestamp } from 'firebase/firestore';
 import { AchievementModal } from '@/components/common/AchievementModal';
@@ -68,6 +69,7 @@ export default function QuickQuizPlayer() {
   const theme = useTheme();
   const updateStats = useUpdateUserStats();
   const updateLeaderboard = useUpdateLeaderboard();
+  const queryClient = useQueryClient();
   const user = useAuthState();
 
   const [quizData, setQuizData] = useState<QuizData | null>(null);
@@ -140,22 +142,28 @@ export default function QuickQuizPlayer() {
   const getReturnPath = () => {
     const storedFullMock = sessionStorage.getItem('fullMockTest');
     const storedSectionalMock = sessionStorage.getItem('sectionalMockTest');
-    const storedTopicWiseMock = sessionStorage.getItem('topicWiseMockTest');
+    const storedQuickQuizOrigin = sessionStorage.getItem('quickQuizOrigin');
     
     if (storedFullMock || storedSectionalMock) {
       return '/tests'; // Return to Tests page for mock tests
     }
-    return '/quick-quiz'; // Return to Practice page for quick quizzes
+    if (storedQuickQuizOrigin === 'practice') {
+      return '/practice';
+    }
+    return '/quick-quiz';
   };
 
   // Get button text based on test type
   const getReturnButtonText = () => {
     const storedFullMock = sessionStorage.getItem('fullMockTest');
     const storedSectionalMock = sessionStorage.getItem('sectionalMockTest');
-    const storedTopicWiseMock = sessionStorage.getItem('topicWiseMockTest');
+    const storedQuickQuizOrigin = sessionStorage.getItem('quickQuizOrigin');
     
     if (storedFullMock || storedSectionalMock) {
       return 'Try Another Test'; // For mock tests from Tests page
+    }
+    if (storedQuickQuizOrigin === 'practice') {
+      return 'Try Another Practice Quiz';
     }
     return 'Try Another Quiz'; // For quick quizzes from Practice page
   };
@@ -227,8 +235,22 @@ export default function QuickQuizPlayer() {
     // Calculate score details
     const scoreData = calculateScore();
     
-    // Update user stats in Firestore
+    // Persist every authenticated quiz/mock attempt so it always appears in recent attempts.
     if (quizData && user) {
+      const isFullMock = Boolean(sessionStorage.getItem('fullMockTest'));
+      const isSectionalMock = Boolean(sessionStorage.getItem('sectionalMockTest'));
+      const isTopicWiseMock = Boolean(sessionStorage.getItem('topicWiseMockTest'));
+      const isQuickPractice = sessionStorage.getItem('quickQuizOrigin') === 'practice';
+      const attemptTestType = isFullMock
+        ? 'full-mock'
+        : isSectionalMock
+          ? 'sectional-mock'
+          : isTopicWiseMock
+            ? 'topic-wise-mock'
+        : isQuickPractice
+          ? 'quick-practice'
+          : 'quick-quiz';
+
       updateStats.mutate({
         testId: quizData.id,
         questionsAnswered: scoreData.correct + scoreData.incorrect,
@@ -260,6 +282,7 @@ export default function QuickQuizPlayer() {
         examId: quizData.id,
         examTitle: quizData.title,
         status: 'completed',
+        testType: attemptTestType,
         startedAt: Timestamp.fromMillis(startTime),
         submittedAt: Timestamp.now(),
         timeSpentSec: timeSpentSec,
@@ -274,9 +297,14 @@ export default function QuickQuizPlayer() {
           incorrect: scoreData.incorrect,
           skipped: scoreData.unanswered,
         },
-      }).catch((error) => {
-        console.error('Error saving attempt:', error);
-      });
+      })
+        .then(() => {
+          queryClient.invalidateQueries({ queryKey: ['attempts', user.uid] });
+          queryClient.invalidateQueries({ queryKey: ['attempts', user.uid, 'recent'] });
+        })
+        .catch((error) => {
+          console.error('Error saving attempt:', error);
+        });
     }
   };
 

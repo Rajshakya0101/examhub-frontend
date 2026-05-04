@@ -1,5 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
-import { Box, Container, useMediaQuery, useTheme } from '@mui/material';
+import { Box, useMediaQuery, useTheme } from '@mui/material';
 import TopBar from './TopBar';
 import SideNav from './SideNav';
 import { AuthGuard } from '../../lib/authContext';
@@ -17,6 +17,7 @@ export default function Layout({ children, requireAuth = true, allowGuest = fals
   
   // Check if we're on the landing page
   const isLandingPage = location.pathname === '/';
+  const desktopNavWidth = 240;
   
   // For landing page, render the children directly without the container
   if (isLandingPage && !requireAuth) {
@@ -52,21 +53,24 @@ export default function Layout({ children, requireAuth = true, allowGuest = fals
       }}
     >
       <TopBar />
-      <Container 
+      <Box 
         component="main" 
-        maxWidth="lg"
         sx={{ 
           flexGrow: 1, 
           py: 3,
+          ml: { md: `${desktopNavWidth}px` },
+          width: { xs: '100%', md: `calc(100% - ${desktopNavWidth}px)` },
           px: { xs: 2, sm: 3 },
           // Add bottom padding on mobile to account for bottom navigation
           pb: isMobile ? 10 : 3,
           // Add transition for theme changes
           transition: theme.transitions.create(['background-color', 'box-shadow']),
+          boxSizing: 'border-box',
         }}
       >
         <Box 
           sx={{
+            width: '100%',
             borderRadius: 3,
             overflow: 'hidden',
             boxShadow: theme.palette.mode === 'dark' ? 'none' : '0 2px 12px rgba(0,0,0,0.08)',
@@ -77,7 +81,7 @@ export default function Layout({ children, requireAuth = true, allowGuest = fals
         >
           {children || <Outlet />}
         </Box>
-      </Container>
+      </Box>
       <SideNav />
     </Box>
   );

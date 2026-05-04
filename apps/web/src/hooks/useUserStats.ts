@@ -56,11 +56,17 @@ export function useUserStats() {
   }, [user?.uid]);
   
   // Use real-time data if available, otherwise use cached data
-  const stats = realtimeStats || cachedStats;
-  
-  // Computed values
+  const rawStats = realtimeStats || cachedStats;
+
+  // Computed values from rawStats
+  const accuracyPercentage = rawStats && rawStats.questionsAnswered > 0
+    ? Math.round((rawStats.correctAnswers / rawStats.questionsAnswered) * 100)
+    : 0;
+
+  // Normalize stats so that `accuracy` field always reflects the computed value
+  const stats = rawStats ? { ...rawStats, accuracy: accuracyPercentage } : null;
+
   const formattedTimeSpent = stats ? formatTimeSpent(stats.totalTimeSpentSec) : '0m';
-  const accuracyPercentage = stats ? Math.round(stats.accuracy) : 0;
   const improvement = stats && stats.recentScores.length >= 2
     ? Math.round(stats.recentScores[stats.recentScores.length - 1].score - stats.recentScores[0].score)
     : 0;
@@ -117,7 +123,7 @@ export function useUpdateUserStats() {
  * Hook to get user stats summary for display
  */
 export function useUserStatsSummary() {
-  const { stats, isLoading, formattedTimeSpent, accuracyPercentage, improvement } = useUserStats();
+  const { stats, isLoading, accuracyPercentage, improvement } = useUserStats();
   
   if (!stats) {
     return {
@@ -140,19 +146,37 @@ export function useUserStatsSummary() {
         topicWiseScore: 0,
         topicWiseAccuracy: 0,
         topicWiseTests: 0,
+        lastActivityTimestamp: null,
+        dailyStreakPerformance: [],
       }
     };
   }
+
+  const recentScoreValues = (stats.recentScores || [])
+    .map((entry) => Number(entry.score))
+    .filter((value) => Number.isFinite(value));
+
+  const totalQuestionsAnswered = Math.max(0, stats.questionsAnswered || 0);
+  const totalTimeSpentSec = Math.max(0, stats.totalTimeSpentSec || 0);
+  const dailyStreakHistory = (stats.recentScores || []).map((entry) => ({
+    date: entry.date,
+    score: Number(entry.score) || 0,
+  }));
+
+  const trendImprovement =
+    recentScoreValues.length >= 2
+      ? Math.round(recentScoreValues[recentScoreValues.length - 1] - recentScoreValues[0])
+      : 0;
   
   return {
     isLoading,
     summary: {
       streak: stats.currentStreak,
-      questionsAnswered: stats.questionsAnswered,
+      questionsAnswered: totalQuestionsAnswered,
       accuracy: accuracyPercentage,
-      timeSpent: formattedTimeSpent,
+      timeSpent: formatTimeSpent(totalTimeSpentSec),
       testsCompleted: stats.testsCompleted,
-      improvement,
+      improvement: trendImprovement || improvement,
       longestStreak: stats.longestStreak,
       recentScore: stats.recentScores.length > 0 
         ? Math.round(stats.recentScores[stats.recentScores.length - 1].score)
@@ -166,6 +190,8 @@ export function useUserStatsSummary() {
       topicWiseScore: stats.topicWiseScore || 0,
       topicWiseAccuracy: stats.topicWiseAccuracy || 0,
       topicWiseTests: stats.topicWiseTests || 0,
+      lastActivityTimestamp: stats.lastActivityTimestamp || null,
+      dailyStreakPerformance: dailyStreakHistory,
     }
   };
 }

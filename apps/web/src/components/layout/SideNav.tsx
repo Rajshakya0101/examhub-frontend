@@ -7,6 +7,11 @@ import {
   useMediaQuery,
   useTheme,
   Badge,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Typography,
 } from '@mui/material';
 import { useAuthState } from '@/lib/auth';
 import { useGuestMode } from '@/lib/guestContext';
@@ -18,6 +23,7 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import QuizIcon from '@mui/icons-material/Quiz';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import NewspaperIcon from '@mui/icons-material/Newspaper';
+import HistoryIcon from '@mui/icons-material/History';
 
 export default function SideNav() {
   const location = useLocation();
@@ -38,21 +44,96 @@ export default function SideNav() {
     { label: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
     { label: 'Practice', path: '/practice', icon: <SchoolIcon /> },
     { label: 'Tests', path: '/tests', icon: <AssignmentIcon /> },
+    { label: 'Attempts', path: '/attempts', icon: <HistoryIcon /> },
     { label: 'Leaderboard', path: '/leaderboard', icon: <EmojiEventsIcon /> },
   ];
 
   const navItems = isGuestMode ? guestNavItems : regularNavItems;
-
-  // Only show mobile bottom navigation on mobile devices and when user is logged in
-  if (!isMobile || !user) {
-    return null;
-  }
+  const desktopWidth = 240;
 
   // Get the active path value
   const getCurrentValue = () => {
     const item = navItems.find(item => location.pathname === item.path);
     return item ? item.path : '/dashboard';
   };
+
+  // Desktop left-side nav
+  if (!isMobile && user) {
+    return (
+      <Box
+        sx={{
+          width: desktopWidth,
+          flexShrink: 0,
+        }}
+      >
+        <Paper
+          elevation={0}
+          sx={{
+            position: 'fixed',
+            top: 64,
+            left: 0,
+            width: desktopWidth,
+            height: 'calc(100vh - 64px)',
+            borderRight: `1px solid ${theme.palette.divider}`,
+            borderRadius: 0,
+            overflowY: 'auto',
+            bgcolor: theme.palette.mode === 'dark'
+              ? 'rgba(28, 28, 28, 0.96)'
+              : 'rgba(255, 255, 255, 0.92)',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <Box sx={{ px: 2.5, py: 2 }}>
+            <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 1.2 }}>
+              Navigation
+            </Typography>
+          </Box>
+
+          <List sx={{ px: 1.5, pt: 0 }}>
+            {navItems.map((item) => (
+              <ListItemButton
+                key={item.path}
+                component={NavLink}
+                to={item.path}
+                selected={location.pathname === item.path}
+                sx={{
+                  mb: 0.5,
+                  borderRadius: 2,
+                  mx: 0.5,
+                  '&.Mui-selected': {
+                    bgcolor: 'primary.main',
+                    color: 'primary.contrastText',
+                    '& .MuiListItemIcon-root': {
+                      color: 'primary.contrastText',
+                    },
+                    '&:hover': {
+                      bgcolor: 'primary.main',
+                    },
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ minWidth: 40, color: 'text.secondary' }}>
+                  {item.path === '/tests' ? (
+                    <Badge color="error" badgeContent={2} max={99}>
+                      {item.icon}
+                    </Badge>
+                  ) : (
+                    item.icon
+                  )}
+                </ListItemIcon>
+                <ListItemText primary={item.label} />
+              </ListItemButton>
+            ))}
+          </List>
+        </Paper>
+      </Box>
+    );
+  }
+
+  // Only show mobile bottom navigation on mobile devices and when user is logged in
+  if (!isMobile || !user) {
+    return null;
+  }
 
   return (
     <Box sx={{ width: '100%', position: 'fixed', bottom: 0, left: 0, zIndex: 1000 }}>

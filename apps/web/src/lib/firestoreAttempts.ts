@@ -14,7 +14,7 @@ export async function createAttempt(
   userId: string,
   examId: string,
   examTitle: string,
-  testType: 'full-mock' | 'sectional' | 'topic-wise',
+  testType: 'full-mock' | 'sectional-mock' | 'topic-wise-mock' | 'quick-practice' | 'quick-quiz',
   totalQuestions: number,
   timeLimitMinutes: number
 ): Promise<string> {
@@ -40,6 +40,8 @@ export async function createAttempt(
       incorrect: 0,
       skipped: totalQuestions,
     },
+    // Maximum marks for this attempt (2 marks per question)
+    maxMarks: totalQuestions * 2,
     updatedAt: Timestamp.now(),
   });
 
@@ -52,19 +54,26 @@ export async function createAttempt(
 export async function saveAnswer(
   attemptId: string,
   questionId: string,
-  selectedOption: string | null,
-  timeSpentMs: number,
-  markedForReview: boolean = false
+  payload: {
+    selectedIdx?: number | null;
+    selectedOption?: string | null;
+    timeSpentMs?: number;
+    markedForReview?: boolean;
+    questionId?: string;
+  }
 ): Promise<void> {
   const answerRef = doc(db, 'attempts', attemptId, 'answers', questionId);
-  
-  await setDoc(answerRef, {
-    questionId,
-    selectedOption,
-    timeSpentMs,
-    markedForReview,
+
+  const docData: any = {
+    questionId: payload.questionId || questionId,
+    selectedIdx: payload.selectedIdx,
+    selectedOption: payload.selectedOption ?? null,
+    timeSpentMs: payload.timeSpentMs ?? 0,
+    markedForReview: payload.markedForReview ?? false,
     savedAt: Timestamp.now(),
-  });
+  };
+
+  await setDoc(answerRef, docData);
 }
 
 /**
@@ -102,7 +111,8 @@ export async function submitAttempt(
   });
 
   const totalQuestions = questions.length;
-  const rawScore = correct;
+  const rawScore = correct; // number of correct answers
+  const rawMarks = correct * 2; // marks (2 per question)
   const percentage = (correct / totalQuestions) * 100;
   const timeSpentSec = Math.floor(totalTimeSpent / 1000);
 
@@ -114,7 +124,7 @@ export async function submitAttempt(
     submittedAt: Timestamp.now(),
     timeSpentSec,
     score: {
-      raw: rawScore,
+      raw: rawMarks, // store raw as marks (2 marks per correct answer)
       percentage: Math.round(percentage * 100) / 100,
       passFail: percentage >= 40 ? 'pass' : 'fail',
     },
@@ -125,6 +135,7 @@ export async function submitAttempt(
       incorrect,
       skipped,
     },
+    maxMarks: totalQuestions * 2,
     updatedAt: Timestamp.now(),
   });
 

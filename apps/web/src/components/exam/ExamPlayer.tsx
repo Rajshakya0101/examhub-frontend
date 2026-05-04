@@ -10,7 +10,6 @@ import {
   FormControlLabel,
   Radio,
   RadioGroup,
-  LinearProgress,
   useMediaQuery,
   useTheme,
   Dialog,
@@ -24,9 +23,10 @@ import {
 } from '@mui/material';
 import { useTimerStore } from '@/lib/store';
 import { submitAttempt, saveAnswer } from '@/lib/firestoreAttempts';
-import { doc, getDoc, collection, query, where, getDocs, addDoc, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, Timestamp } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuthState } from '@/lib/auth';
+import { useQueryClient } from '@tanstack/react-query';
 
 // Types
 interface Question {
@@ -57,6 +57,7 @@ export default function ExamPlayer() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
   const user = useAuthState();
+  const queryClient = useQueryClient();
   
   // Timer state from Zustand
   const { timeLeft, startTimer, pauseTimer } = useTimerStore();
@@ -136,15 +137,30 @@ export default function ExamPlayer() {
         
         // Create attempt document if new attempt
         if (attemptId === 'new') {
+          const examTitle = testData.title || testData.examTitle || examId;
+          // Derive test type from examId
+          const testIdLower = (examId || '').toString().toLowerCase();
+          const attemptTestType = testIdLower.includes('quick') ? 'quick-practice' : testIdLower.includes('sectional') ? 'sectional-mock' : testIdLower.includes('topic') ? 'topic-wise-mock' : testIdLower.includes('full') ? 'full-mock' : 'full-mock';
+
           const attemptData = {
-            testId: examId,
+            examId: examId,
+            examTitle: examTitle,
             userId: user.uid,
+            testType: attemptTestType,
             startedAt: Timestamp.now(),
             status: 'in-progress',
             answers: {},
-            timeSpent: 0
+            timeSpentSec: 0,
+            questionStats: {
+              total: questionIds.length,
+              attempted: 0,
+              correct: 0,
+              incorrect: 0,
+              skipped: questionIds.length,
+            },
+            maxMarks: questionIds.length * 2,
           };
-          
+
           const attemptRef = await addDoc(collection(db, 'attempts'), attemptData);
           setAttemptDocId(attemptRef.id);
         } else {
@@ -240,8 +256,21 @@ export default function ExamPlayer() {
     pauseTimer();
     
     try {
+      // Transform questions to match submitAttempt signature
+      const transformedQuestions = questions.map(q => ({
+        id: q.id,
+        correctOption: q.correctIndex !== undefined && q.options[q.correctIndex] ? q.options[q.correctIndex] : '',
+        selectedOption: q.selectedIdx !== null && q.options[q.selectedIdx] ? q.options[q.selectedIdx] : null,
+        timeSpentMs: q.timeSpentMs
+      }));
+
       // Submit attempt to Firestore
-      await submitAttempt(attemptDocId, timeLeft, questions);
+      await submitAttempt(attemptDocId, timeLeft, transformedQuestions);
+      // Refresh attempts lists so Dashboard/Recent reflect this submission
+      if (user) {
+        queryClient.invalidateQueries({ queryKey: ['attempts', user.uid] });
+        queryClient.invalidateQueries({ queryKey: ['attempts', user.uid, 'recent'] });
+      }
       
       // Navigate to results page
       navigate(`/analysis/${attemptDocId}`);

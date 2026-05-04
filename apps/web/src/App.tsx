@@ -34,6 +34,8 @@ import FullMock from './routes/FullMock';
 import SectionalMock from './routes/SectionalMock';
 import TopicWiseMock from './routes/TopicWiseMock';
 import FirestoreTest from './routes/FirestoreTest';
+import AttemptedTests from './routes/AttemptedTests';
+import UnderDevelopment from './routes/UnderDevelopment';
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -104,6 +106,10 @@ const router = createBrowserRouter([
     element: <Layout><Analysis /></Layout>,
   },
   {
+    path: '/attempts',
+    element: <Layout><AttemptedTests /></Layout>,
+  },
+  {
     path: '/leaderboard',
     element: <Layout allowGuest><Leaderboard /></Layout>,
   },
@@ -130,6 +136,18 @@ const router = createBrowserRouter([
   {
     path: '/profile',
     element: <Layout><Profile /></Layout>,
+  },
+  {
+    path: '/notes',
+    element: <Layout><UnderDevelopment /></Layout>,
+  },
+  {
+    path: '/bookmarks',
+    element: <Layout><UnderDevelopment /></Layout>,
+  },
+  {
+    path: '/premium',
+    element: <Layout><UnderDevelopment /></Layout>,
   },
   {
     path: '/settings',
