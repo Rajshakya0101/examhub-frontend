@@ -40,6 +40,9 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 
+const NEW_MCQ_API_BASE_URL = 'https://pranova-mcq-new.hf.space';
+const NEW_MCQ_API_ENDPOINT = '/generate-test';
+
 // Exam options with their subjects and topics
 const quantTopics = [
   'algebra',
@@ -136,24 +139,49 @@ const examOptions = [
   },
 ];
 
+interface NewMcqQuestion {
+  id: string;
+  section: string;
+  question: string;
+  options: {
+    A?: string;
+    B?: string;
+    C?: string;
+    D?: string;
+  };
+  topic: string;
+  answer: string;
+}
+
+interface NewMcqResponse {
+  mode: string;
+  exam: string;
+  requested: {
+    mode: string;
+    exam: string;
+    section: string;
+    topic: string;
+    count: number;
+    seed: number;
+    include_answers: boolean;
+  };
+  count: number;
+  distribution: Record<string, number>;
+  questions: NewMcqQuestion[];
+}
+
 interface TopicWiseMockResponse {
   message: string;
   test: {
     id: string;
-    examId: string;
     title: string;
     subject: string;
     difficulty: string;
     numQuestions: number;
     durationMinutes: number;
-    isAIGenerated: boolean;
-    createdAt: string;
     questions: Array<{
       id: string;
-      examId: string;
-      subject: string;
-      topic: string;
-      difficulty: string;
+      subject?: string;
       questionText: string;
       optionA: string;
       optionB: string;
@@ -161,12 +189,78 @@ interface TopicWiseMockResponse {
       optionD: string;
       correctOption: string;
       explanation: string;
-      shortcut: string;
       timeToSolveSeconds: number;
     }>;
   };
-  provider: string;
 }
+
+const generateSeed = () => {
+  return Math.floor(Math.random() * 1_000_000_000);
+};
+
+const createRequestNonce = () => `${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`;
+
+const mapExamToApiFormat = (examValue: string): string => {
+  if (examValue === 'SSC Combined Graduate Level') return 'SSC_CGL';
+  if (examValue === 'SSC CHSL') return 'SSC_CHSL';
+  if (examValue === 'Railway RRB NTPC') return 'RRB_NTPC';
+  return 'SSC_CGL';
+};
+
+const mapSubjectToApiSection = (examValue: string, subject: string): 'quant' | 'reasoning' | 'english' | 'gk' => {
+  if (subject === 'Quantitative Aptitude' || subject === 'Mathematics') return 'quant';
+  if (subject === 'Reasoning') return 'reasoning';
+  if (subject === 'English Language') return 'english';
+  if (subject === 'General Awareness' || subject === 'GK/GS' || subject === 'Science') return 'gk';
+
+  if (examValue === 'Railway RRB NTPC') {
+    if (subject === 'Mathematics') return 'quant';
+    if (subject === 'Reasoning') return 'reasoning';
+    return 'gk';
+  }
+
+  return 'quant';
+};
+
+const mapNewMcqResponseToQuiz = (
+  examValue: string,
+  subject: string,
+  topic: string,
+  durationMinutes: number,
+  data: NewMcqResponse
+): TopicWiseMockResponse => {
+  const questions = (data.questions || []).map((q) => ({
+    id: q.id,
+    subject,
+    questionText: q.question,
+    optionA: q.options?.A || '',
+    optionB: q.options?.B || '',
+    optionC: q.options?.C || '',
+    optionD: q.options?.D || '',
+    correctOption: q.answer || '',
+    explanation: '',
+    timeToSolveSeconds: 60,
+  }));
+
+  if (questions.length === 0) {
+    throw new Error('New MCQ API returned no questions');
+  }
+
+  const examLabel = examOptions.find((option) => option.value === examValue)?.label || 'Topic-wise Mock';
+
+  return {
+    message: 'Topic-wise mock test generated successfully',
+    test: {
+      id: `topic-wise-mock-${Date.now()}`,
+      title: `${examLabel} - ${subject} - ${topic}`,
+      subject,
+      difficulty: 'mixed',
+      numQuestions: questions.length,
+      durationMinutes,
+      questions,
+    },
+  };
+};
 
 export default function TopicWiseMock() {
   const navigate = useNavigate();
@@ -216,32 +310,56 @@ export default function TopicWiseMock() {
   // Mutation to generate topic-wise mock test
   const generateMockMutation = useMutation({
     mutationFn: async () => {
-      console.log('Calling Topic-wise Mock API with:', {
-        exam: selectedExam,
-        subject: selectedSubject,
+      const endpoint = `${NEW_MCQ_API_BASE_URL}${NEW_MCQ_API_ENDPOINT}`;
+      const apiExam = mapExamToApiFormat(selectedExam);
+      const section = mapSubjectToApiSection(selectedExam, selectedSubject);
+      const seed = generateSeed();
+      const requestNonce = createRequestNonce();
+      const durationMinutes = calculateDuration();
+
+      const payload = {
+        mode: 'topic',
+        exam: apiExam,
+        section,
         topic: selectedTopic,
-        numQuestions,
+        count: numQuestions,
+        seed,
+        include_answers: true,
+      };
+
+      console.log('Calling Topic-wise Mock API with:', {
+        endpoint,
+        requestNonce,
+        ...payload,
       });
 
       try {
-        const response = await axios.post<TopicWiseMockResponse>(
-          'https://examhub-2.onrender.com/api/v2/generate-topic-wise-mock',
-          {
-            exam: selectedExam,
-            subject: selectedSubject,
-            topic: selectedTopic,
-            numQuestions,
-          },
+        const response = await axios.post<NewMcqResponse>(
+          endpoint,
+          payload,
           {
             timeout: 300000, // 5 minute timeout
+            params: {
+              _: requestNonce,
+            },
             headers: {
               'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
             },
           }
         );
 
-        console.log('Topic-wise Mock Response:', response.data);
-        return response.data;
+        const normalized = mapNewMcqResponseToQuiz(
+          selectedExam,
+          selectedSubject,
+          selectedTopic,
+          durationMinutes,
+          response.data
+        );
+
+        console.log('Topic-wise Mock Response (normalized):', normalized);
+        return normalized;
       } catch (err: any) {
         console.error('API Error:', {
           message: err.message,
