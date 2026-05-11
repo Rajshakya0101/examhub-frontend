@@ -31,7 +31,6 @@ import {
   Calculate as CalculateIcon,
   Public as PublicIcon,
   Computer as ComputerIcon,
-  Translate as TranslateIcon,
   EmojiEvents as TrophyIcon,
   Timer as TimerIcon,
   Help as HelpIcon,
@@ -47,12 +46,8 @@ import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 import { fetchCurrentAffairsQuiz } from '@/lib/api/currentAffairsApi';
 
-const QUIZ_API_BASE_URL = import.meta.env.VITE_QUIZ_API_BASE_URL || 'https://examhub-2.onrender.com/api/v2';
-const DEFAULT_QUIZ_API_PATH = '/generate-quiz';
-const MATHEMATICS_QUIZ_API_ENDPOINT =
-  import.meta.env.VITE_MATHEMATICS_QUIZ_API_ENDPOINT ||
-  'https://pranova-new-mcq-api.hf.space/generate_mock';
-const MATHEMATICS_QUIZ_SEED_OVERRIDE = import.meta.env.VITE_MATHEMATICS_QUIZ_SEED;
+const NEW_MCQ_API_BASE_URL = 'https://pranova-mcq-new.hf.space';
+const NEW_MCQ_API_ENDPOINT = '/generate-test';
 
 interface QuizPreset {
   subject: string;
@@ -61,18 +56,46 @@ interface QuizPreset {
   icon: React.ReactNode;
   color: string;
   description: string;
-  apiPath?: string;
-  apiSubject?: string;
-  apiProvider?: 'default' | 'hf-mcq' | 'current-affairs';
-  apiEndpoint?: string;
-  hfSection?: 'quant' | 'reasoning' | 'english' | 'polity';
+  apiSection?: 'quant' | 'reasoning' | 'english' | 'gk' | 'computer';
+  apiProvider?: 'new-mcq' | 'current-affairs';
+}
+
+interface NewMcqQuestion {
+  id: string;
+  section: string;
+  question: string;
+  options: {
+    A?: string;
+    B?: string;
+    C?: string;
+    D?: string;
+  };
+  topic: string;
+  answer: string;
+}
+
+interface NewMcqResponse {
+  mode: string;
+  exam: string;
+  requested: {
+    mode: string;
+    exam: string;
+    section: string;
+    topic: null | string;
+    count: number;
+    seed: number;
+    include_answers: boolean;
+  };
+  count: number;
+  distribution: Record<string, number>;
+  questions: NewMcqQuestion[];
 }
 
 const FIXED_QUESTIONS_PER_SUBJECT = 15;
 const STANDARD_MAX_DURATION_MINUTES = 8;
 const EXTENDED_DURATION_SUBJECTS = new Set(['Mathematics', 'Reasoning']);
 
-// Quiz presets matching the API
+// Quiz presets matching the new API
 const quizPresets: QuizPreset[] = [
   {
     subject: 'Current Affairs',
@@ -90,10 +113,8 @@ const quizPresets: QuizPreset[] = [
     icon: <CalculateIcon fontSize="large" />,
     color: '#7c3aed',
     description: 'Challenging mathematical problems',
-    apiProvider: 'hf-mcq',
-    apiEndpoint: MATHEMATICS_QUIZ_API_ENDPOINT,
-    apiSubject: 'Mathematics',
-    hfSection: 'quant',
+    apiProvider: 'new-mcq',
+    apiSection: 'quant',
   },
   {
     subject: 'General Knowledge',
@@ -102,6 +123,8 @@ const quizPresets: QuizPreset[] = [
     icon: <SchoolIcon fontSize="large" />,
     color: '#10b981',
     description: 'Basic GK questions for practice',
+    apiProvider: 'new-mcq',
+    apiSection: 'gk',
   },
   {
     subject: 'English',
@@ -110,10 +133,8 @@ const quizPresets: QuizPreset[] = [
     icon: <LanguageIcon fontSize="large" />,
     color: '#f59e0b',
     description: 'Grammar, vocabulary, and comprehension',
-    apiProvider: 'hf-mcq',
-    apiEndpoint: MATHEMATICS_QUIZ_API_ENDPOINT,
-    apiSubject: 'English',
-    hfSection: 'english',
+    apiProvider: 'new-mcq',
+    apiSection: 'english',
   },
   {
     subject: 'Reasoning',
@@ -122,10 +143,8 @@ const quizPresets: QuizPreset[] = [
     icon: <PsychologyIcon fontSize="large" />,
     color: '#ec4899',
     description: 'Logical reasoning and analytical ability',
-    apiProvider: 'hf-mcq',
-    apiEndpoint: MATHEMATICS_QUIZ_API_ENDPOINT,
-    apiSubject: 'Reasoning',
-    hfSection: 'reasoning',
+    apiProvider: 'new-mcq',
+    apiSection: 'reasoning',
   },
   {
     subject: 'Computer Knowledge',
@@ -134,6 +153,8 @@ const quizPresets: QuizPreset[] = [
     icon: <ComputerIcon fontSize="large" />,
     color: '#3b82f6',
     description: 'Basic computer awareness',
+    apiProvider: 'new-mcq',
+    apiSection: 'computer',
   },
 ];
 
@@ -160,57 +181,6 @@ interface QuizResponse {
   };
 }
 
-interface HfMathQuestion {
-  section: string;
-  question: string;
-  options: {
-    A?: string;
-    B?: string;
-    C?: string;
-    D?: string;
-  };
-  answer?: string;
-}
-
-interface HfMathResponse {
-  count: number;
-  seed: number;
-  mix: string;
-  questions: HfMathQuestion[];
-}
-
-const buildHfMix = (section: 'quant' | 'reasoning' | 'english' | 'polity', count: number) => {
-  const counts = {
-    quant: 0,
-    reasoning: 0,
-    english: 0,
-    polity: 0,
-  };
-
-  counts[section] = count;
-
-  return `quant:${counts.quant},reasoning:${counts.reasoning},english:${counts.english},polity:${counts.polity}`;
-};
-
-let lastGeneratedSeed: number | null = null;
-let seedRequestCounter = 0;
-
-const generateUniqueSeed = () => {
-  const overrideBase = MATHEMATICS_QUIZ_SEED_OVERRIDE ? Number(MATHEMATICS_QUIZ_SEED_OVERRIDE) : NaN;
-  const base = Number.isFinite(overrideBase) ? overrideBase : Math.floor(Math.random() * 1_000_000_000);
-
-  seedRequestCounter = (seedRequestCounter + 1) % 1_000_000_000;
-
-  let seed = Math.floor((base + Date.now() + seedRequestCounter) % 1_000_000_000);
-
-  if (seed === lastGeneratedSeed) {
-    seed = (seed + 1) % 1_000_000_000;
-  }
-
-  lastGeneratedSeed = seed;
-  return seed;
-};
-
 const createRequestNonce = () => `${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`;
 
 const getQuizDurationMinutes = (preset: Pick<QuizPreset, 'subject' | 'numQuestions'>) => {
@@ -221,9 +191,13 @@ const getQuizDurationMinutes = (preset: Pick<QuizPreset, 'subject' | 'numQuestio
   return Math.min(STANDARD_MAX_DURATION_MINUTES, preset.numQuestions);
 };
 
-const mapMathResponseToQuiz = (preset: QuizPreset, data: HfMathResponse): QuizResponse => {
-  const questions = (data.questions || []).slice(0, preset.numQuestions).map((q, index) => ({
-    id: `math-${index + 1}`,
+const generateSeed = () => {
+  return Math.floor(Math.random() * 1_000_000_000);
+};
+
+const mapNewMcqResponseToQuiz = (preset: QuizPreset, data: NewMcqResponse): QuizResponse => {
+  const questions = (data.questions || []).slice(0, preset.numQuestions).map((q) => ({
+    id: q.id,
     questionText: q.question,
     optionA: q.options?.A || '',
     optionB: q.options?.B || '',
@@ -235,10 +209,10 @@ const mapMathResponseToQuiz = (preset: QuizPreset, data: HfMathResponse): QuizRe
   }));
 
   if (questions.length === 0) {
-    throw new Error('Mathematics API returned no questions');
+    throw new Error('New MCQ API returned no questions');
   }
 
-  const generatedId = `math-quick-${Date.now()}`;
+  const generatedId = `mcq-quick-${Date.now()}`;
 
   return {
     message: 'Quiz generated successfully',
@@ -269,25 +243,28 @@ export default function QuickQuiz() {
         return await fetchCurrentAffairsQuiz(preset.numQuestions);
       }
 
-      if (preset.apiProvider === 'hf-mcq') {
-        const endpoint = preset.apiEndpoint || MATHEMATICS_QUIZ_API_ENDPOINT;
-        const section = preset.hfSection || 'quant';
-        const seed = generateUniqueSeed();
+      if (preset.apiProvider === 'new-mcq') {
+        const endpoint = `${NEW_MCQ_API_BASE_URL}${NEW_MCQ_API_ENDPOINT}`;
+        const section = preset.apiSection || 'quant';
+        const seed = generateSeed();
         const requestNonce = createRequestNonce();
-        const mathPayload = {
+
+        const mcqPayload = {
+          mode: 'sectional',
+          exam: 'SSC_CGL',
+          section: section,
           count: preset.numQuestions,
-          mix: buildHfMix(section, preset.numQuestions),
-          seed,
+          seed: seed,
           include_answers: true,
         };
 
-        console.log('Calling Mathematics API with:', {
+        console.log('Calling New MCQ API with:', {
           endpoint,
           requestNonce,
-          ...mathPayload,
+          ...mcqPayload,
         });
 
-        const mathResponse = await axios.post<HfMathResponse>(endpoint, mathPayload, {
+        const mcqResponse = await axios.post<NewMcqResponse>(endpoint, mcqPayload, {
           timeout: 240000,
           params: {
             _: requestNonce,
@@ -299,61 +276,12 @@ export default function QuickQuiz() {
           },
         });
 
-        const normalized = mapMathResponseToQuiz(preset, mathResponse.data);
-        console.log('Mathematics API Response (normalized):', normalized);
+        const normalized = mapNewMcqResponseToQuiz(preset, mcqResponse.data);
+        console.log('New MCQ API Response (normalized):', normalized);
         return normalized;
       }
 
-      const apiPath = preset.apiPath || DEFAULT_QUIZ_API_PATH;
-      const endpoint = `${QUIZ_API_BASE_URL}${apiPath}`;
-      const subjectForApi = preset.apiSubject || preset.subject;
-      const requestNonce = createRequestNonce();
-
-      console.log('Calling external API directly with:', {
-        endpoint,
-        requestNonce,
-        subject: subjectForApi,
-        difficulty: preset.difficulty,
-        numQuestions: preset.numQuestions,
-      });
-      
-      try {
-        const response = await axios.post<QuizResponse>(
-          endpoint,
-          {
-            subject: subjectForApi,
-            difficulty: preset.difficulty,
-            numQuestions: preset.numQuestions,
-          },
-          {
-            timeout: 240000, // 240 second timeout
-            params: {
-              _: requestNonce,
-            },
-            headers: {
-              'Content-Type': 'application/json',
-              'Cache-Control': 'no-cache',
-              Pragma: 'no-cache',
-            },
-          }
-        );
-
-        if (Array.isArray(response.data?.test?.questions)) {
-          response.data.test.questions = response.data.test.questions.slice(0, preset.numQuestions);
-          response.data.test.numQuestions = response.data.test.questions.length;
-        }
-        response.data.test.durationMinutes = getQuizDurationMinutes(preset);
-        
-        console.log('API Response:', response.data);
-        return response.data;
-      } catch (err: any) {
-        console.error('API Error:', {
-          message: err.message,
-          response: err.response?.data,
-          status: err.response?.status,
-        });
-        throw err;
-      }
+      throw new Error(`Unknown API provider: ${preset.apiProvider}`);
     },
     onSuccess: (data) => {
       // Clear any existing quiz data first

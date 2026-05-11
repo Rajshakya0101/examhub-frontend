@@ -9,7 +9,6 @@ import {
   CardActions,
   Button,
   Grid,
-  Chip,
   CircularProgress,
   Alert,
   Paper,
@@ -32,7 +31,6 @@ import {
 import {
   School as SchoolIcon,
   Timer as TimerIcon,
-  EmojiEvents as TrophyIcon,
   Assessment as AssessmentIcon,
   CheckCircle as CheckIcon,
   Cancel as WrongIcon,
@@ -41,39 +39,52 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 
-// Exam options with their display names
-const examOptions = [
-  { value: 'SSC Combined Graduate Level', label: 'SSC CGL', questions: 100, duration: 60 },
-  { value: 'SSC CHSL', label: 'SSC CHSL', questions: 100, duration: 60 },
-  { value: 'Railway RRB NTPC', label: 'Railway RRB NTPC', questions: 100, duration: 90 },
-  { value: 'IBPS PO Prelims', label: 'IBPS PO Prelims', questions: 100, duration: 60 },
-  { value: 'SBI Clerk Prelims', label: 'SBI Clerk Prelims', questions: 100, duration: 60 },
-];
+const NEW_MCQ_API_BASE_URL = 'https://pranova-mcq-new.hf.space';
+const NEW_MCQ_API_ENDPOINT = '/generate-test';
 
-const difficultyOptions = [
-  { value: 'easy', label: 'Easy', color: '#10b981' },
-  { value: 'moderate', label: 'Moderate', color: '#f59e0b' },
-  { value: 'hard', label: 'Hard', color: '#ef4444' },
-];
+interface NewMcqQuestion {
+  id: string;
+  section: string;
+  question: string;
+  options: {
+    A?: string;
+    B?: string;
+    C?: string;
+    D?: string;
+  };
+  topic: string;
+  answer: string;
+}
 
-interface FullMockResponse {
+interface NewMcqResponse {
+  mode: string;
+  exam: string;
+  requested: {
+    mode: string;
+    exam: string;
+    section: string | null;
+    topic: null | string;
+    count: number;
+    seed: number;
+    include_answers: boolean;
+  };
+  count: number;
+  distribution: Record<string, number>;
+  questions: NewMcqQuestion[];
+}
+
+interface QuizResponse {
   message: string;
   test: {
     id: string;
-    examId: string;
     title: string;
     subject: string;
     difficulty: string;
     numQuestions: number;
     durationMinutes: number;
-    isAIGenerated: boolean;
-    createdAt: string;
     questions: Array<{
       id: string;
-      examId: string;
-      subject: string;
-      topic: string;
-      difficulty: string;
+      subject?: string;
       questionText: string;
       optionA: string;
       optionB: string;
@@ -81,46 +92,125 @@ interface FullMockResponse {
       optionD: string;
       correctOption: string;
       explanation: string;
-      shortcut: string;
       timeToSolveSeconds: number;
     }>;
   };
-  provider: string;
 }
+
+const mapApiSectionToDisplay = (section: string): string => {
+  if (section === 'quant') return 'Quantitative Aptitude';
+  if (section === 'reasoning') return 'Reasoning';
+  if (section === 'english') return 'English Language';
+  if (section === 'gk') return 'General Awareness';
+  return section;
+};
+
+const generateSeed = () => {
+  return Math.floor(Math.random() * 1_000_000_000);
+};
+
+const createRequestNonce = () => `${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`;
+
+const mapExamToApiFormat = (examValue: string): string => {
+  if (examValue === 'SSC Combined Graduate Level') return 'SSC_CGL';
+  if (examValue === 'SSC CHSL') return 'SSC_CHSL';
+  if (examValue === 'Railway RRB NTPC') return 'RRB_NTPC';
+  return 'SSC_CGL';
+};
+
+const mapNewMcqResponseToQuiz = (examValue: string, data: NewMcqResponse): QuizResponse => {
+  const questions = (data.questions || []).map((q) => ({
+    id: q.id,
+    subject: mapApiSectionToDisplay(q.section),
+    questionText: q.question,
+    optionA: q.options?.A || '',
+    optionB: q.options?.B || '',
+    optionC: q.options?.C || '',
+    optionD: q.options?.D || '',
+    correctOption: q.answer || '',
+    explanation: '',
+    timeToSolveSeconds: 60,
+  }));
+
+  if (questions.length === 0) {
+    throw new Error('New MCQ API returned no questions');
+  }
+
+  const examLabel = examOptions.find((e) => e.value === examValue)?.label || 'Full Mock';
+
+  return {
+    message: 'Full mock test generated successfully',
+    test: {
+      id: `full-mock-${Date.now()}`,
+      title: `${examLabel} Full Mock Test`,
+      subject: 'Full Mock',
+      difficulty: 'mixed',
+      numQuestions: questions.length,
+      durationMinutes: examOptions.find((e) => e.value === examValue)?.duration || 60,
+      questions,
+    },
+  };
+};
+
+// Exam options with their display names
+const examOptions = [
+  { value: 'SSC Combined Graduate Level', label: 'SSC CGL', questions: 100, duration: 60 },
+  { value: 'SSC CHSL', label: 'SSC CHSL', questions: 100, duration: 60 },
+  { value: 'Railway RRB NTPC', label: 'Railway RRB NTPC', questions: 100, duration: 90 },
+];
+
+
 
 export default function FullMock() {
   const navigate = useNavigate();
   const theme = useTheme();
   const [error, setError] = useState<string | null>(null);
   const [selectedExam, setSelectedExam] = useState('SSC Combined Graduate Level');
-  const [selectedDifficulty, setSelectedDifficulty] = useState('moderate');
   const [showInstructions, setShowInstructions] = useState(false);
 
   // Mutation to generate full mock test
   const generateMockMutation = useMutation({
     mutationFn: async () => {
+      const endpoint = `${NEW_MCQ_API_BASE_URL}${NEW_MCQ_API_ENDPOINT}`;
+      const apiExam = mapExamToApiFormat(selectedExam);
+      const seed = generateSeed();
+      const requestNonce = createRequestNonce();
+
+      const payload = {
+        mode: 'full_mock',
+        exam: apiExam,
+        count: 100,
+        seed: seed,
+        include_answers: true,
+      };
+
       console.log('Calling Full Mock API with:', {
-        exam: selectedExam,
-        difficulty: selectedDifficulty,
+        endpoint,
+        requestNonce,
+        ...payload,
       });
 
       try {
-        const response = await axios.post<FullMockResponse>(
-          'https://examhub-2.onrender.com/api/v2/generate-full-mock',
-          {
-            exam: selectedExam,
-            difficulty: selectedDifficulty,
-          },
+        const response = await axios.post<NewMcqResponse>(
+          endpoint,
+          payload,
           {
             timeout: 600000, // 10 minute timeout (full mock takes longer)
+            params: {
+              _: requestNonce,
+            },
             headers: {
               'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
             },
           }
         );
 
         console.log('Full Mock Response:', response.data);
-        return response.data;
+        const normalized = mapNewMcqResponseToQuiz(selectedExam, response.data);
+        console.log('Full Mock Response (normalized):', normalized);
+        return normalized;
       } catch (err: any) {
         console.error('API Error:', {
           message: err.message,
@@ -182,7 +272,6 @@ export default function FullMock() {
   };
 
   const selectedExamInfo = examOptions.find((e) => e.value === selectedExam);
-  const selectedDifficultyInfo = difficultyOptions.find((d) => d.value === selectedDifficulty);
 
   return (
     <Box
@@ -294,18 +383,40 @@ export default function FullMock() {
             Practice with complete exam papers covering all sections
           </Typography>
 
-          <Paper sx={{ p: 3, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 2 }}>
-            <Grid container spacing={2} alignItems="center">
-              <Grid item>
-                <TrophyIcon sx={{ fontSize: 40, color: theme.palette.primary.main }} />
+          <Paper sx={{ p: 4, bgcolor: alpha(theme.palette.primary.main, 0.05), borderRadius: 2 }}>
+            <Grid container spacing={4} alignItems="center" justifyContent="space-around">
+              <Grid item xs={12} sm={4}>
+                <Box sx={{ textAlign: 'center', px: 2 }}>
+                  <AssessmentIcon sx={{ fontSize: 48, color: theme.palette.primary.main }} />
+                  <Typography variant="h6" fontWeight={700} sx={{ mt: 1 }}>
+                    {selectedExamInfo?.questions}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Questions
+                  </Typography>
+                </Box>
               </Grid>
-              <Grid item xs>
-                <Typography variant="body1" fontWeight={500}>
-                  🎯 Complete Exam Pattern • ⚡ AI-Generated • 🆓 Free Practice
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {selectedExamInfo?.questions} questions • {selectedExamInfo?.duration} minutes
-                </Typography>
+              <Grid item xs={12} sm={4}>
+                <Box sx={{ textAlign: 'center', px: 2 }}>
+                  <TimerIcon sx={{ fontSize: 48, color: theme.palette.warning.main }} />
+                  <Typography variant="h6" fontWeight={700} sx={{ mt: 1 }}>
+                    {selectedExamInfo?.duration}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Minutes
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <Box sx={{ textAlign: 'center', px: 2 }}>
+                  <SchoolIcon sx={{ fontSize: 48, color: theme.palette.success.main }} />
+                  <Typography variant="h6" fontWeight={700} sx={{ mt: 1 }}>
+                    All Sections
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Coverage
+                  </Typography>
+                </Box>
               </Grid>
             </Grid>
           </Paper>
@@ -341,7 +452,7 @@ export default function FullMock() {
 
               <Grid container spacing={3} sx={{ mt: 2 }}>
                 {/* Exam Selection */}
-                <Grid item xs={12} md={6}>
+                <Grid item xs={12}>
                   <FormControl fullWidth>
                     <InputLabel>Select Exam</InputLabel>
                     <Select
@@ -357,42 +468,14 @@ export default function FullMock() {
                     </Select>
                   </FormControl>
                 </Grid>
-
-                {/* Difficulty Selection */}
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Difficulty Level</InputLabel>
-                    <Select
-                      value={selectedDifficulty}
-                      label="Difficulty Level"
-                      onChange={(e) => setSelectedDifficulty(e.target.value)}
-                    >
-                      {difficultyOptions.map((diff) => (
-                        <MenuItem key={diff.value} value={diff.value}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box
-                              sx={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                bgcolor: diff.color,
-                              }}
-                            />
-                            {diff.label}
-                          </Box>
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
               </Grid>
 
               {/* Test Info Display */}
-              <Box sx={{ mt: 4, p: 3, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 2 }}>
-                <Grid container spacing={2}>
+              <Box sx={{ mt: 7, p: 3, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 2 }}>
+                <Grid container spacing={3} alignItems="center" justifyContent="center">
                   <Grid item xs={6} sm={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <AssessmentIcon sx={{ fontSize: 32, color: theme.palette.primary.main }} />
+                    <Box sx={{ textAlign: 'center', px: 1 }}>
+                      <AssessmentIcon sx={{ fontSize: 34, color: theme.palette.primary.main }} />
                       <Typography variant="h6" fontWeight={600}>
                         {selectedExamInfo?.questions}
                       </Typography>
@@ -402,8 +485,8 @@ export default function FullMock() {
                     </Box>
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <TimerIcon sx={{ fontSize: 32, color: theme.palette.warning.main }} />
+                    <Box sx={{ textAlign: 'center', px: 1 }}>
+                      <TimerIcon sx={{ fontSize: 34, color: theme.palette.warning.main }} />
                       <Typography variant="h6" fontWeight={600}>
                         {selectedExamInfo?.duration}
                       </Typography>
@@ -413,32 +496,13 @@ export default function FullMock() {
                     </Box>
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <SchoolIcon sx={{ fontSize: 32, color: theme.palette.success.main }} />
+                    <Box sx={{ textAlign: 'center', px: 1 }}>
+                      <SchoolIcon sx={{ fontSize: 34, color: theme.palette.success.main }} />
                       <Typography variant="h6" fontWeight={600}>
                         All Sections
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Coverage
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6} sm={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Box
-                        sx={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '50%',
-                          bgcolor: selectedDifficultyInfo?.color,
-                          margin: '0 auto',
-                        }}
-                      />
-                      <Typography variant="h6" fontWeight={600}>
-                        {selectedDifficultyInfo?.label}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Difficulty
                       </Typography>
                     </Box>
                   </Grid>

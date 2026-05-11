@@ -33,7 +33,6 @@ import QuickQuizPlayer from './routes/QuickQuizPlayer';
 import FullMock from './routes/FullMock';
 import SectionalMock from './routes/SectionalMock';
 import TopicWiseMock from './routes/TopicWiseMock';
-import FirestoreTest from './routes/FirestoreTest';
 import AttemptedTests from './routes/AttemptedTests';
 import UnderDevelopment from './routes/UnderDevelopment';
 
@@ -153,10 +152,7 @@ const router = createBrowserRouter([
     path: '/settings',
     element: <Layout><Settings /></Layout>,
   },
-  {
-    path: '/firestore-test',
-    element: <Layout requireAuth={false}><FirestoreTest /></Layout>,
-  },
+  
   {
     path: '*',
     element: <Layout requireAuth={false}><NotFound /></Layout>,

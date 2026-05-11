@@ -51,6 +51,7 @@ interface Question {
   explanation: string;
   timeToSolveSeconds: number;
   subject?: string; // Add subject field for section-wise organization
+  section?: string;
 }
 
 interface QuizData {
@@ -87,7 +88,7 @@ export default function QuickQuizPlayer() {
 
   // Group questions by subject for full mock tests
   const questionsBySection = quizData?.questions.reduce((acc, question, index) => {
-    const subject = question.subject || 'General';
+    const subject = question.subject || question.section || 'General';
     if (!acc[subject]) {
       acc[subject] = [];
     }
@@ -122,15 +123,15 @@ export default function QuickQuizPlayer() {
         setTimeLeft(state.timeLeft || quiz.durationMinutes * 60);
         setCurrentIndex(state.currentIndex || 0);
         setShowResults(state.showResults || false);
-        setCurrentSection(state.currentSection || (quiz.questions[0]?.subject || null));
+        setCurrentSection(state.currentSection || (quiz.questions[0]?.subject || quiz.questions[0]?.section || null));
         setIsPaused(state.isPaused || false);
       } else {
         // Initialize fresh state
         setTimeLeft(quiz.durationMinutes * 60);
         
         // Set initial section for full mock
-        if (quiz.questions.length > 0 && quiz.questions[0].subject) {
-          setCurrentSection(quiz.questions[0].subject);
+        if (quiz.questions.length > 0) {
+          setCurrentSection(quiz.questions[0].subject || quiz.questions[0].section || null);
         }
       }
     } else {
@@ -604,9 +605,9 @@ export default function QuickQuizPlayer() {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Question {currentIndex + 1} of {quizData.questions.length}
-                {isFullMock && currentQuestion?.subject && (
+                {isFullMock && (currentQuestion?.subject || currentQuestion?.section) && (
                   <Chip 
-                    label={currentQuestion.subject} 
+                    label={currentQuestion.subject || currentQuestion.section} 
                     size="small" 
                     sx={{ ml: 1 }}
                     color="primary"
@@ -655,7 +656,7 @@ export default function QuickQuizPlayer() {
               {sections.map((section) => {
                 const sectionQuestions = questionsBySection![section];
                 const sectionAnswered = sectionQuestions.filter(q => answers[q.id]).length;
-                const isCurrentSection = currentQuestion?.subject === section;
+                const isCurrentSection = (currentQuestion?.subject || currentQuestion?.section) === section;
                 
                 return (
                   <Chip
@@ -682,24 +683,71 @@ export default function QuickQuizPlayer() {
         <Grid container spacing={2}>
           {/* Left Sidebar - Question Palette */}
           <Grid item xs={12} md={3}>
-            <Paper sx={{ p: 3, borderRadius: 3, position: 'sticky', top: 80 }}>
+            <Paper sx={{ p: 3, borderRadius: 3, position: 'sticky', top: 80, maxHeight: '70vh', overflow: 'auto' }}>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Question Palette
               </Typography>
-              <Grid container spacing={1}>
-                {quizData.questions.map((q, idx) => (
-                  <Grid item xs={3} key={q.id}>
-                    <Button
-                      variant={idx === currentIndex ? 'contained' : 'outlined'}
-                      color={answers[q.id] ? 'success' : 'primary'}
-                      onClick={() => setCurrentIndex(idx)}
-                      sx={{ minWidth: 40, height: 40, width: '100%' }}
-                    >
-                      {idx + 1}
-                    </Button>
-                  </Grid>
-                ))}
-              </Grid>
+              
+              {isFullMock && sections.length > 1 ? (
+                // Section-wise palette for full mock
+                <Box>
+                  {sections.map((section) => {
+                    const sectionQuestions = questionsBySection![section];
+                    return (
+                      <Box key={section} sx={{ mb: 2 }}>
+                        <Typography 
+                          variant="caption" 
+                          fontWeight={600} 
+                          color="text.secondary"
+                          sx={{ display: 'block', mb: 1, textTransform: 'uppercase' }}
+                        >
+                          {section}
+                        </Typography>
+                        <Grid container spacing={0.5}>
+                          {sectionQuestions.map((q) => {
+                            const idx = q.originalIndex;
+                            return (
+                              <Grid item xs={3} key={q.id}>
+                                <Button
+                                  variant={idx === currentIndex ? 'contained' : 'outlined'}
+                                  color={answers[q.id] ? 'success' : 'primary'}
+                                  onClick={() => setCurrentIndex(idx)}
+                                  size="small"
+                                  sx={{ 
+                                    minWidth: 32, 
+                                    height: 32, 
+                                    width: '100%',
+                                    fontSize: '0.7rem',
+                                    p: 0,
+                                  }}
+                                >
+                                  {idx + 1}
+                                </Button>
+                              </Grid>
+                            );
+                          })}
+                        </Grid>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              ) : (
+                // Flat palette for quick/topic-wise quizzes
+                <Grid container spacing={1}>
+                  {quizData.questions.map((q, idx) => (
+                    <Grid item xs={3} key={q.id}>
+                      <Button
+                        variant={idx === currentIndex ? 'contained' : 'outlined'}
+                        color={answers[q.id] ? 'success' : 'primary'}
+                        onClick={() => setCurrentIndex(idx)}
+                        sx={{ minWidth: 40, height: 40, width: '100%' }}
+                      >
+                        {idx + 1}
+                      </Button>
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
             </Paper>
           </Grid>
 

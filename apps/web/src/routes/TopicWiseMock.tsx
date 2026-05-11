@@ -9,7 +9,6 @@ import {
   CardActions,
   Button,
   Grid,
-  Chip,
   CircularProgress,
   Alert,
   Paper,
@@ -31,9 +30,7 @@ import {
   Divider,
 } from '@mui/material';
 import {
-  School as SchoolIcon,
   Timer as TimerIcon,
-  EmojiEvents as TrophyIcon,
   Assessment as AssessmentIcon,
   Topic as TopicIcon,
   CheckCircle as CheckIcon,
@@ -44,198 +41,99 @@ import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 
 // Exam options with their subjects and topics
+const quantTopics = [
+  'algebra',
+  'arithmetic',
+  'average',
+  'coordinate geometry',
+  'data interpretation',
+  'geometry',
+  'mensuration',
+  'number system',
+  'percentage',
+  'profit and loss',
+  'ratio and proportion',
+  'simple and compound interest',
+  'simplification',
+  'statistics',
+  'time and work',
+  'time, speed and distance',
+  'trigonometry',
+];
+
+const reasoningTopics = [
+  'analogy',
+  'blood_relation',
+  'coding_decoding',
+  'direction_distance',
+  'misc_reasoning',
+  'puzzle',
+  'ranking_order',
+  'seating_arrangement',
+  'series',
+  'syllogism',
+];
+
+const englishTopics = [
+  'antonyms',
+  'articles',
+  'idioms and phrases',
+  'modals and conditionals',
+  'noun',
+  'one-word substitution',
+  'phrasal verbs',
+  'prepositions',
+  'pronoun and determiners',
+  'subject-verb agreement',
+  'synonyms',
+  'tenses',
+  'verb',
+  'voice and narration',
+];
+
+const gkTopics = [
+  'art_culture',
+  'computer',
+  'current_affairs',
+  'economics',
+  'environment',
+  'geography',
+  'history',
+  'polity',
+  'science',
+  'static_gk',
+];
+
 const examOptions = [
   {
     value: 'SSC Combined Graduate Level',
     label: 'SSC CGL',
     subjects: {
-      'Quantitative Aptitude': [
-        'Number System',
-        'Percentage',
-        'Ratio and Proportion',
-        'Average',
-        'Time and Work',
-        'Time Speed Distance',
-        'Simple Interest',
-        'Compound Interest',
-        'Profit and Loss',
-        'Algebra',
-        'Geometry',
-        'Mensuration',
-        'Trigonometry',
-        'Data Interpretation',
-      ],
-      'Reasoning': [
-        'Analogy',
-        'Classification',
-        'Series',
-        'Coding-Decoding',
-        'Blood Relations',
-        'Direction Sense',
-        'Syllogism',
-        'Seating Arrangement',
-        'Puzzles',
-        'Venn Diagrams',
-      ],
-      'English Language': [
-        'Vocabulary',
-        'Grammar',
-        'Reading Comprehension',
-        'Sentence Correction',
-        'Fill in the Blanks',
-        'Synonyms-Antonyms',
-        'Idioms and Phrases',
-      ],
-      'General Awareness': [
-        'History',
-        'Geography',
-        'Polity',
-        'Economics',
-        'Science',
-        'Current Affairs',
-        'Static GK',
-      ],
+      'Quantitative Aptitude': quantTopics,
+      'Reasoning': reasoningTopics,
+      'English Language': englishTopics,
+      'General Awareness': gkTopics,
     },
   },
   {
     value: 'SSC CHSL',
     label: 'SSC CHSL',
     subjects: {
-      'Quantitative Aptitude': [
-        'Number System',
-        'Percentage',
-        'Ratio and Proportion',
-        'Average',
-        'Time and Work',
-        'Simple Interest',
-        'Profit and Loss',
-        'Algebra',
-        'Geometry',
-        'Mensuration',
-      ],
-      'Reasoning': [
-        'Analogy',
-        'Classification',
-        'Series',
-        'Coding-Decoding',
-        'Blood Relations',
-        'Direction Sense',
-        'Puzzles',
-      ],
-      'English Language': [
-        'Vocabulary',
-        'Grammar',
-        'Reading Comprehension',
-        'Sentence Correction',
-        'Fill in the Blanks',
-      ],
-      'General Awareness': [
-        'History',
-        'Geography',
-        'Polity',
-        'Current Affairs',
-        'Static GK',
-      ],
+      'Quantitative Aptitude': quantTopics,
+      'Reasoning': reasoningTopics,
+      'English Language': englishTopics,
+      'General Awareness': gkTopics,
     },
   },
   {
     value: 'Railway RRB NTPC',
     label: 'Railway RRB NTPC',
     subjects: {
-      'Mathematics': [
-        'Number System',
-        'Percentage',
-        'Ratio and Proportion',
-        'Time and Work',
-        'Time Speed Distance',
-        'Algebra',
-        'Geometry',
-      ],
-      'Reasoning': [
-        'Analogy',
-        'Classification',
-        'Series',
-        'Coding-Decoding',
-        'Puzzles',
-        'Syllogism',
-      ],
-      'General Awareness': [
-        'History',
-        'Geography',
-        'Polity',
-        'Current Affairs',
-        'Sports',
-        'Science',
-      ],
+      'Mathematics': quantTopics,
+      'Reasoning': reasoningTopics,
+      'General Awareness': gkTopics,
     },
   },
-  {
-    value: 'IBPS PO Prelims',
-    label: 'IBPS PO Prelims',
-    subjects: {
-      'Quantitative Aptitude': [
-        'Number System',
-        'Simplification',
-        'Data Interpretation',
-        'Quadratic Equations',
-        'Percentage',
-        'Average',
-        'Ratio and Proportion',
-      ],
-      'Reasoning': [
-        'Seating Arrangement',
-        'Puzzles',
-        'Syllogism',
-        'Inequality',
-        'Blood Relations',
-        'Direction Sense',
-        'Coding-Decoding',
-      ],
-      'English Language': [
-        'Reading Comprehension',
-        'Cloze Test',
-        'Para Jumbles',
-        'Error Spotting',
-        'Fill in the Blanks',
-      ],
-    },
-  },
-  {
-    value: 'SBI Clerk Prelims',
-    label: 'SBI Clerk Prelims',
-    subjects: {
-      'Quantitative Aptitude': [
-        'Number System',
-        'Simplification',
-        'Data Interpretation',
-        'Percentage',
-        'Average',
-        'Ratio and Proportion',
-        'Time and Work',
-      ],
-      'Reasoning': [
-        'Seating Arrangement',
-        'Puzzles',
-        'Syllogism',
-        'Inequality',
-        'Coding-Decoding',
-        'Direction Sense',
-      ],
-      'English Language': [
-        'Reading Comprehension',
-        'Cloze Test',
-        'Error Spotting',
-        'Fill in the Blanks',
-        'Para Jumbles',
-      ],
-    },
-  },
-];
-
-const difficultyOptions = [
-  { value: 'easy', label: 'Easy', color: '#10b981' },
-  { value: 'moderate', label: 'Moderate', color: '#f59e0b' },
-  { value: 'hard', label: 'Hard', color: '#ef4444' },
 ];
 
 interface TopicWiseMockResponse {
@@ -276,8 +174,7 @@ export default function TopicWiseMock() {
   const [error, setError] = useState<string | null>(null);
   const [selectedExam, setSelectedExam] = useState('SSC Combined Graduate Level');
   const [selectedSubject, setSelectedSubject] = useState('Quantitative Aptitude');
-  const [selectedTopic, setSelectedTopic] = useState('Number System');
-  const [selectedDifficulty, setSelectedDifficulty] = useState('moderate');
+  const [selectedTopic, setSelectedTopic] = useState('algebra');
   const [numQuestions, setNumQuestions] = useState(25);
   const [showInstructions, setShowInstructions] = useState(false);
 
@@ -324,7 +221,6 @@ export default function TopicWiseMock() {
         subject: selectedSubject,
         topic: selectedTopic,
         numQuestions,
-        difficulty: selectedDifficulty,
       });
 
       try {
@@ -335,7 +231,6 @@ export default function TopicWiseMock() {
             subject: selectedSubject,
             topic: selectedTopic,
             numQuestions,
-            difficulty: selectedDifficulty,
           },
           {
             timeout: 300000, // 5 minute timeout
@@ -423,8 +318,6 @@ export default function TopicWiseMock() {
       return Math.ceil(numQuestions * 1);
     }
   };
-
-  const selectedDifficultyInfo = difficultyOptions.find((d) => d.value === selectedDifficulty);
 
   return (
     <Box
@@ -649,39 +542,12 @@ export default function TopicWiseMock() {
                   />
                 </Grid>
 
-                {/* Difficulty Selection */}
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>Difficulty Level</InputLabel>
-                    <Select
-                      value={selectedDifficulty}
-                      label="Difficulty Level"
-                      onChange={(e) => setSelectedDifficulty(e.target.value)}
-                    >
-                      {difficultyOptions.map((diff) => (
-                        <MenuItem key={diff.value} value={diff.value}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box
-                              sx={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                bgcolor: diff.color,
-                              }}
-                            />
-                            {diff.label}
-                          </Box>
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
               </Grid>
 
               {/* Test Info Display */}
               <Box sx={{ mt: 4, p: 3, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 2 }}>
                 <Grid container spacing={2}>
-                  <Grid item xs={6} sm={3}>
+                  <Grid item xs={6} sm={4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <AssessmentIcon sx={{ fontSize: 32, color: theme.palette.primary.main }} />
                       <Typography variant="h6" fontWeight={600}>
@@ -692,7 +558,7 @@ export default function TopicWiseMock() {
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={6} sm={3}>
+                  <Grid item xs={6} sm={4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <TimerIcon sx={{ fontSize: 32, color: theme.palette.warning.main }} />
                       <Typography variant="h6" fontWeight={600}>
@@ -703,7 +569,7 @@ export default function TopicWiseMock() {
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={6} sm={3}>
+                  <Grid item xs={6} sm={4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <TopicIcon sx={{ fontSize: 32, color: theme.palette.success.main }} />
                       <Typography variant="h6" fontWeight={600} sx={{ fontSize: '0.85rem' }}>
@@ -711,25 +577,6 @@ export default function TopicWiseMock() {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         Topic Focus
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6} sm={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Box
-                        sx={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '50%',
-                          bgcolor: selectedDifficultyInfo?.color,
-                          margin: '0 auto',
-                        }}
-                      />
-                      <Typography variant="h6" fontWeight={600}>
-                        {selectedDifficultyInfo?.label}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Difficulty
                       </Typography>
                     </Box>
                   </Grid>

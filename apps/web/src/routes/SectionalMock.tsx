@@ -19,7 +19,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  TextField,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -42,6 +41,155 @@ import {
 import { useMutation } from '@tanstack/react-query';
 import axios from 'axios';
 
+const NEW_MCQ_API_BASE_URL = 'https://pranova-mcq-new.hf.space';
+const NEW_MCQ_API_ENDPOINT = '/generate-test';
+
+interface NewMcqQuestion {
+  id: string;
+  section: string;
+  question: string;
+  options: {
+    A?: string;
+    B?: string;
+    C?: string;
+    D?: string;
+  };
+  topic: string;
+  answer: string;
+}
+
+interface NewMcqResponse {
+  mode: string;
+  exam: string;
+  requested: {
+    mode: string;
+    exam: string;
+    section: string;
+    topic: null | string;
+    count: number;
+    seed: number;
+    include_answers: boolean;
+  };
+  count: number;
+  distribution: Record<string, number>;
+  questions: NewMcqQuestion[];
+}
+
+interface QuizResponse {
+  message: string;
+  test: {
+    id: string;
+    title: string;
+    subject: string;
+    difficulty: string;
+    numQuestions: number;
+    durationMinutes: number;
+    questions: Array<{
+      id: string;
+      subject?: string;
+      questionText: string;
+      optionA: string;
+      optionB: string;
+      optionC: string;
+      optionD: string;
+      correctOption: string;
+      explanation: string;
+      shortcut: string;
+      timeToSolveSeconds: number;
+    }>;
+  };
+  provider: string;
+}
+
+const generateSeed = () => {
+  return Math.floor(Math.random() * 1_000_000_000);
+};
+
+const createRequestNonce = () => `${Date.now()}-${Math.floor(Math.random() * 1_000_000_000)}`;
+
+const mapExamToApiFormat = (examValue: string): string => {
+  if (examValue === 'SSC Combined Graduate Level') return 'SSC_CGL';
+  if (examValue === 'SSC CHSL') return 'SSC_CHSL';
+  if (examValue === 'Railway RRB NTPC') return 'RRB_NTPC';
+  return 'SSC_CGL';
+};
+
+const mapSubjectToApiSection = (examValue: string, subject: string): 'quant' | 'reasoning' | 'english' | 'gk' => {
+  if (subject === 'Quantitative Aptitude' || subject === 'Mathematics') return 'quant';
+  if (subject === 'Reasoning') return 'reasoning';
+  if (subject === 'English Language') return 'english';
+  if (subject === 'General Awareness' || subject === 'GK/GS' || subject === 'Science') return 'gk';
+
+  if (examValue === 'Railway RRB NTPC') {
+    if (subject === 'GK/GS') return 'gk';
+    if (subject === 'Mathematics') return 'quant';
+    if (subject === 'Reasoning') return 'reasoning';
+  }
+
+  return 'quant';
+};
+
+const getSectionConfig = (examValue: string, subject: string) => {
+  const section = mapSubjectToApiSection(examValue, subject);
+
+  if (examValue === 'Railway RRB NTPC') {
+    return {
+      section,
+      count: section === 'gk' ? 40 : 30,
+    };
+  }
+
+  return {
+    section,
+    count: 25,
+  };
+};
+
+const getSectionDurationMinutes = (examValue: string, subject: string) => {
+  if (examValue === 'Railway RRB NTPC') {
+    if (subject === 'Mathematics') return 35;
+    if (subject === 'Reasoning') return 30;
+    if (subject === 'GK/GS') return 25;
+  }
+
+  return 15;
+};
+
+const mapNewMcqResponseToQuiz = (examValue: string, subject: string, data: NewMcqResponse): QuizResponse => {
+  const questions = (data.questions || []).map((question) => ({
+    id: question.id,
+    subject,
+    questionText: question.question,
+    optionA: question.options?.A || '',
+    optionB: question.options?.B || '',
+    optionC: question.options?.C || '',
+    optionD: question.options?.D || '',
+    correctOption: question.answer || '',
+    explanation: '',
+    shortcut: '',
+    timeToSolveSeconds: 60,
+  }));
+
+  if (questions.length === 0) {
+    throw new Error('New MCQ API returned no questions');
+  }
+
+  const examLabel = examOptions.find((option) => option.value === examValue)?.label || 'Sectional Mock';
+
+  return {
+    message: 'Sectional mock test generated successfully',
+    test: {
+      id: `sectional-mock-${Date.now()}`,
+      title: `${examLabel} - ${subject}`,
+      subject,
+      difficulty: 'mixed',
+      numQuestions: questions.length,
+      durationMinutes: getSectionDurationMinutes(examValue, subject),
+      questions,
+    },
+  };
+};
+
 // Exam options with their subjects
 const examOptions = [
   {
@@ -57,24 +205,8 @@ const examOptions = [
   {
     value: 'Railway RRB NTPC',
     label: 'Railway RRB NTPC',
-    subjects: ['Mathematics', 'Reasoning', 'General Awareness', 'Science'],
+    subjects: ['Mathematics', 'Reasoning', 'GK/GS'],
   },
-  {
-    value: 'IBPS PO Prelims',
-    label: 'IBPS PO Prelims',
-    subjects: ['Quantitative Aptitude', 'Reasoning', 'English Language'],
-  },
-  {
-    value: 'SBI Clerk Prelims',
-    label: 'SBI Clerk Prelims',
-    subjects: ['Quantitative Aptitude', 'Reasoning', 'English Language'],
-  },
-];
-
-const difficultyOptions = [
-  { value: 'easy', label: 'Easy', color: '#10b981' },
-  { value: 'moderate', label: 'Moderate', color: '#f59e0b' },
-  { value: 'hard', label: 'Hard', color: '#ef4444' },
 ];
 
 interface SectionalMockResponse {
@@ -115,8 +247,6 @@ export default function SectionalMock() {
   const [error, setError] = useState<string | null>(null);
   const [selectedExam, setSelectedExam] = useState('SSC Combined Graduate Level');
   const [selectedSubject, setSelectedSubject] = useState('Quantitative Aptitude');
-  const [selectedDifficulty, setSelectedDifficulty] = useState('moderate');
-  const [numQuestions, setNumQuestions] = useState(25);
   const [showInstructions, setShowInstructions] = useState(false);
 
   const selectedExamInfo = examOptions.find((e) => e.value === selectedExam);
@@ -134,32 +264,50 @@ export default function SectionalMock() {
   // Mutation to generate sectional mock test
   const generateMockMutation = useMutation({
     mutationFn: async () => {
+      const endpoint = `${NEW_MCQ_API_BASE_URL}${NEW_MCQ_API_ENDPOINT}`;
+      const apiExam = mapExamToApiFormat(selectedExam);
+      const { section, count } = getSectionConfig(selectedExam, selectedSubject);
+      const seed = generateSeed();
+      const requestNonce = createRequestNonce();
+
       console.log('Calling Sectional Mock API with:', {
-        exam: selectedExam,
-        subject: selectedSubject,
-        numQuestions,
-        difficulty: selectedDifficulty,
+        endpoint,
+        requestNonce,
+        mode: 'sectional',
+        exam: apiExam,
+        section,
+        count,
+        seed,
+        include_answers: true,
       });
 
       try {
-        const response = await axios.post<SectionalMockResponse>(
-          'https://examhub-2.onrender.com/api/v2/generate-sectional-mock',
+        const response = await axios.post<NewMcqResponse>(
+          endpoint,
           {
-            exam: selectedExam,
-            subject: selectedSubject,
-            numQuestions,
-            difficulty: selectedDifficulty,
+            mode: 'sectional',
+            exam: apiExam,
+            section,
+            count,
+            seed,
+            include_answers: true,
           },
           {
             timeout: 300000, // 5 minute timeout
+            params: {
+              _: requestNonce,
+            },
             headers: {
               'Content-Type': 'application/json',
+              'Cache-Control': 'no-cache',
+              Pragma: 'no-cache',
             },
           }
         );
 
-        console.log('Sectional Mock Response:', response.data);
-        return response.data;
+        const normalized = mapNewMcqResponseToQuiz(selectedExam, selectedSubject, response.data);
+        console.log('Sectional Mock Response (normalized):', normalized);
+        return normalized;
       } catch (err: any) {
         console.error('API Error:', {
           message: err.message,
@@ -219,8 +367,6 @@ export default function SectionalMock() {
       navigate(`/quick-quiz/${test.id}`);
     }
   };
-
-  const selectedDifficultyInfo = difficultyOptions.find((d) => d.value === selectedDifficulty);
 
   return (
     <Box
@@ -413,75 +559,23 @@ export default function SectionalMock() {
                     </Select>
                   </FormControl>
                 </Grid>
-
-                {/* Number of Questions */}
-                <Grid item xs={12} md={6}>
-                  <TextField
-                    fullWidth
-                    type="number"
-                    label="Number of Questions"
-                    value={numQuestions}
-                    onChange={(e) => setNumQuestions(Math.max(5, Math.min(25, parseInt(e.target.value) || 25)))}
-                    inputProps={{ min: 5, max: 25 }}
-                    helperText="Choose between 5 to 25 questions"
-                  />
-                </Grid>
-
-                {/* Difficulty Selection */}
-                <Grid item xs={12} md={6}>
-                  <FormControl fullWidth>
-                    <InputLabel>Difficulty Level</InputLabel>
-                    <Select
-                      value={selectedDifficulty}
-                      label="Difficulty Level"
-                      onChange={(e) => setSelectedDifficulty(e.target.value)}
-                    >
-                      {difficultyOptions.map((diff) => (
-                        <MenuItem key={diff.value} value={diff.value}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box
-                              sx={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: '50%',
-                                bgcolor: diff.color,
-                              }}
-                            />
-                            {diff.label}
-                          </Box>
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                </Grid>
               </Grid>
 
               {/* Test Info Display */}
               <Box sx={{ mt: 4, p: 3, bgcolor: alpha(theme.palette.info.main, 0.05), borderRadius: 2 }}>
                 <Grid container spacing={2}>
-                  <Grid item xs={6} sm={3}>
+                  <Grid item xs={6} sm={4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <AssessmentIcon sx={{ fontSize: 32, color: theme.palette.primary.main }} />
                       <Typography variant="h6" fontWeight={600}>
-                        {numQuestions}
+                        {selectedExam.split(' ').slice(0, 2).join(' ')}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Questions
+                        Exam
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={6} sm={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <TimerIcon sx={{ fontSize: 32, color: theme.palette.warning.main }} />
-                      <Typography variant="h6" fontWeight={600}>
-                        {numQuestions}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Minutes
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  <Grid item xs={6} sm={3}>
+                  <Grid item xs={6} sm={4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <SchoolIcon sx={{ fontSize: 32, color: theme.palette.success.main }} />
                       <Typography variant="h6" fontWeight={600} sx={{ fontSize: '0.9rem' }}>
@@ -492,22 +586,14 @@ export default function SectionalMock() {
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={6} sm={3}>
+                  <Grid item xs={6} sm={4}>
                     <Box sx={{ textAlign: 'center' }}>
-                      <Box
-                        sx={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '50%',
-                          bgcolor: selectedDifficultyInfo?.color,
-                          margin: '0 auto',
-                        }}
-                      />
+                      <TimerIcon sx={{ fontSize: 32, color: theme.palette.warning.main }} />
                       <Typography variant="h6" fontWeight={600}>
-                        {selectedDifficultyInfo?.label}
+                        Auto
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Difficulty
+                        Duration
                       </Typography>
                     </Box>
                   </Grid>
