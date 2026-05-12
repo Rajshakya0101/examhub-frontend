@@ -6,6 +6,12 @@ import {
   Button,
   Container,
   IconButton,
+  Drawer,
+  List,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Divider,
   Menu,
   MenuItem,
   Toolbar,
@@ -43,7 +49,7 @@ export default function TopBar() {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const isHomePage = location.pathname === '/';
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   
   const handleOpenMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -53,12 +59,12 @@ export default function TopBar() {
     setAnchorEl(null);
   };
   
-  const handleOpenMobileMenu = (event: React.MouseEvent<HTMLElement>) => {
-    setMobileMenuAnchor(event.currentTarget);
+  const handleOpenMobileMenu = () => {
+    setMobileDrawerOpen(true);
   };
   
   const handleCloseMobileMenu = () => {
-    setMobileMenuAnchor(null);
+    setMobileDrawerOpen(false);
   };
   
   const handleSignOut = () => {
@@ -206,31 +212,70 @@ export default function TopBar() {
             </Box>
           )}
 
-          {/* Mobile Navigation Menu */}
-          <Menu
-            anchorEl={mobileMenuAnchor}
-            open={Boolean(mobileMenuAnchor)}
+          {/* Mobile side Drawer navigation */}
+          <Drawer
+            anchor="left"
+            open={mobileDrawerOpen}
             onClose={handleCloseMobileMenu}
-            PaperProps={{
-              sx: {
-                width: '100%',
-                maxWidth: 300,
-                mt: 1.5
-              }
-            }}
+            ModalProps={{ keepMounted: true }}
           >
-            {!user && (
-              <MenuItem 
-                component={RouterLink} 
-                to="/signin" 
-                onClick={handleCloseMobileMenu}
-                sx={{ py: 1.5 }}
-              >
-                <Box sx={{ mr: 2, color: 'primary.main' }}><AccountCircleIcon /></Box>
-                <Typography>Sign In</Typography>
-              </MenuItem>
-            )}
-          </Menu>
+            <Box sx={{ width: 280, height: '100%', display: 'flex', flexDirection: 'column' }} role="presentation">
+              <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 1,
+                  background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 700
+                }}>EH</Box>
+                <Typography variant="h6" sx={{ fontWeight: 700 }}>ExamHub</Typography>
+              </Box>
+
+              <Divider />
+
+              <List sx={{ flex: '0 0 auto' }}>
+                {regularNavItems.map((item) => (
+                  <ListItemButton
+                    key={item.path}
+                    component={RouterLink}
+                    to={item.path}
+                    onClick={handleCloseMobileMenu}
+                  >
+                    <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+                    <ListItemText primary={item.label} />
+                  </ListItemButton>
+                ))}
+              </List>
+
+              <Box sx={{ flex: '1 1 auto' }} />
+
+              <Divider />
+
+              <List>
+                {!user ? (
+                  <ListItemButton component={RouterLink} to="/signin" onClick={handleCloseMobileMenu}>
+                    <ListItemIcon><AccountCircleIcon /></ListItemIcon>
+                    <ListItemText primary="Sign In" />
+                  </ListItemButton>
+                ) : (
+                  <>
+                    <ListItemButton component={RouterLink} to="/profile" onClick={handleCloseMobileMenu}>
+                      <ListItemIcon><AccountCircleIcon /></ListItemIcon>
+                      <ListItemText primary="Profile" />
+                    </ListItemButton>
+                    <ListItemButton component={RouterLink} to="/settings" onClick={handleCloseMobileMenu}>
+                      <ListItemIcon><SettingsIcon /></ListItemIcon>
+                      <ListItemText primary="Settings" />
+                    </ListItemButton>
+                    <ListItemButton onClick={() => { handleSignOut(); handleCloseMobileMenu(); }}>
+                      <ListItemIcon><LogoutIcon /></ListItemIcon>
+                      <ListItemText primary="Sign Out" sx={{ color: 'error.main' }} />
+                    </ListItemButton>
+                  </>
+                )}
+              </List>
+            </Box>
+          </Drawer>
 
           {/* Right side: Theme toggle and user menu */}
           <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center' }}>
