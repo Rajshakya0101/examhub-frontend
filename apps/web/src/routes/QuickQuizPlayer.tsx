@@ -64,6 +64,12 @@ interface QuizData {
   questions: Question[];
 }
 
+const isRRBNTPCExam = (quiz?: QuizData | null) => {
+  if (!quiz) return false;
+  const source = `${quiz.title || ''} ${quiz.id || ''}`.toLowerCase();
+  return /rrb\s*ntpc|rrb-?ntpc/.test(source);
+};
+
 export default function QuickQuizPlayer() {
   const { quizId } = useParams<{ quizId: string }>();
   const navigate = useNavigate();
@@ -176,7 +182,7 @@ export default function QuickQuizPlayer() {
     const timer = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          handleSubmit();
+          void handleSubmit();
           return 0;
         }
         return prev - 1;
@@ -226,59 +232,107 @@ export default function QuickQuizPlayer() {
     }
   };
 
-  const handleSubmit = () => {
+  const handleClearResponse = () => {
+    if (!currentQuestion) return;
+
+    setAnswers((prev) => {
+      const nextAnswers = { ...prev };
+      delete nextAnswers[currentQuestion.id];
+      return nextAnswers;
+    });
+  };
+
+  const optionToIndex = (option?: string | null) => {
+    if (!option) return null;
+    const normalized = option.trim().toUpperCase();
+    if (normalized === 'A') return 0;
+    if (normalized === 'B') return 1;
+    if (normalized === 'C') return 2;
+    if (normalized === 'D') return 3;
+    return null;
+  };
+
+  const handleSubmit = async () => {
     setConfirmSubmit(false);
-    setShowResults(true);
-    
+
     // Calculate time spent on quiz
     const timeSpentSec = Math.floor((Date.now() - startTime) / 1000);
-    
+
     // Calculate score details
     const scoreData = calculateScore();
-    
-    // Persist every authenticated quiz/mock attempt so it always appears in recent attempts.
-    if (quizData && user) {
-      const isFullMock = Boolean(sessionStorage.getItem('fullMockTest'));
-      const isSectionalMock = Boolean(sessionStorage.getItem('sectionalMockTest'));
-      const isTopicWiseMock = Boolean(sessionStorage.getItem('topicWiseMockTest'));
-      const isQuickPractice = sessionStorage.getItem('quickQuizOrigin') === 'practice';
-      const attemptTestType = isFullMock
-        ? 'full-mock'
-        : isSectionalMock
-          ? 'sectional-mock'
-          : isTopicWiseMock
-            ? 'topic-wise-mock'
-        : isQuickPractice
-          ? 'quick-practice'
-          : 'quick-quiz';
 
-      updateStats.mutate({
-        testId: quizData.id,
-        questionsAnswered: scoreData.correct + scoreData.incorrect,
-        correctAnswers: scoreData.correct,
-        incorrectAnswers: scoreData.incorrect,
-        skippedQuestions: scoreData.unanswered,
-        timeSpentSec: timeSpentSec,
-        score: scoreData.percentage,
-      }, {
-        onSuccess: (result) => {
-          // Store achievements to show in modal
-          if (result && result.newAchievements.length > 0) {
-            setNewAchievements(result.newAchievements);
-            setStreakMilestone(result.streakMilestone);
-            setShowAchievements(true);
-          } else if (result && result.streakMilestone) {
-            setStreakMilestone(true);
-            setShowAchievements(true);
-          }
-          
-          // After stats are updated, update leaderboard
-          updateLeaderboard.mutate();
+    if (!quizData || !user) {
+      // Fallback path for unauthenticated sessions.
+      setShowResults(true);
+      return;
+    }
+
+    const isFullMock = Boolean(sessionStorage.getItem('fullMockTest'));
+    const isSectionalMock = Boolean(sessionStorage.getItem('sectionalMockTest'));
+    const isTopicWiseMock = Boolean(sessionStorage.getItem('topicWiseMockTest'));
+    const isQuickPractice = sessionStorage.getItem('quickQuizOrigin') === 'practice';
+    const attemptTestType = isFullMock
+      ? 'full-mock'
+      : isSectionalMock
+        ? 'sectional-mock'
+        : isTopicWiseMock
+          ? 'topic-wise-mock'
+          : isQuickPractice
+            ? 'quick-practice'
+            : 'quick-quiz';
+
+    updateStats.mutate({
+      testId: quizData.id,
+      questionsAnswered: scoreData.correct + scoreData.incorrect,
+      correctAnswers: scoreData.correct,
+      incorrectAnswers: scoreData.incorrect,
+      skippedQuestions: scoreData.unanswered,
+      timeSpentSec: timeSpentSec,
+      score: scoreData.percentage,
+    }, {
+      onSuccess: (result) => {
+        if (result && result.newAchievements.length > 0) {
+          setNewAchievements(result.newAchievements);
+          setStreakMilestone(result.streakMilestone);
+          setShowAchievements(true);
+        } else if (result && result.streakMilestone) {
+          setStreakMilestone(true);
+          setShowAchievements(true);
         }
+
+        updateLeaderboard.mutate();
+      }
+    });
+
+    try {
+      const questionSnapshots = quizData.questions.map((q) => ({
+        id: q.id,
+        section: q.section || q.subject || 'General',
+        subject: q.subject || q.section || 'General',
+        topic: q.subject || q.section || 'General',
+        stem: q.questionText,
+        questionText: q.questionText,
+        options: [q.optionA, q.optionB, q.optionC, q.optionD],
+        optionA: q.optionA,
+        optionB: q.optionB,
+        optionC: q.optionC,
+        optionD: q.optionD,
+        correctIndex: optionToIndex(q.correctOption) ?? 0,
+        correctOption: q.correctOption,
+        explanation: q.explanation,
+      }));
+
+      const answerEntries = quizData.questions.map((q) => {
+        const selectedOption = answers[q.id] ?? null;
+        return {
+          questionId: q.id,
+          selectedIdx: optionToIndex(selectedOption),
+          selectedOption,
+          timeSpentMs: 0,
+        };
       });
-      
-      // Save attempt to Firestore
-      saveTestAttempt({
+
+      const attemptId = await saveTestAttempt({
         userId: user.uid,
         examId: quizData.id,
         examTitle: quizData.title,
@@ -291,6 +345,7 @@ export default function QuickQuizPlayer() {
           raw: scoreData.rawMarks,
           percentage: scoreData.percentage,
         },
+        maxMarks: quizData.questions.length * (isRRBNTPCExam(quizData) ? 1 : 2),
         questionStats: {
           total: quizData.questions.length,
           attempted: scoreData.correct + scoreData.incorrect,
@@ -298,14 +353,17 @@ export default function QuickQuizPlayer() {
           incorrect: scoreData.incorrect,
           skipped: scoreData.unanswered,
         },
-      })
-        .then(() => {
-          queryClient.invalidateQueries({ queryKey: ['attempts', user.uid] });
-          queryClient.invalidateQueries({ queryKey: ['attempts', user.uid, 'recent'] });
-        })
-        .catch((error) => {
-          console.error('Error saving attempt:', error);
-        });
+        questionSnapshots,
+        answers: answerEntries,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['attempts', user.uid] });
+      queryClient.invalidateQueries({ queryKey: ['attempts', user.uid, 'recent'] });
+
+      navigate(`/analysis/${attemptId}`, { replace: true });
+    } catch (error) {
+      console.error('Error saving attempt:', error);
+      setShowResults(true);
     }
   };
 
@@ -327,17 +385,17 @@ export default function QuickQuizPlayer() {
       }
     });
 
-    // Marking scheme:
-    // Correct Answer: +2 marks
-    // Wrong Answer: -0.5 marks
-    // Unattempted: 0 marks
-    const MARKS_PER_CORRECT = 2;
-    const MARKS_PER_WRONG = -0.5;
+    // Exam-specific marking scheme
+    // RRB NTPC: +1, -1/3, 0
+    // Others (CGL/CHSL/default): +2, -0.5, 0
+    const isRRBNTPC = isRRBNTPCExam(quizData);
+    const MARKS_PER_CORRECT = isRRBNTPC ? 1 : 2;
+    const MARKS_PER_WRONG = isRRBNTPC ? -(1 / 3) : -0.5;
     const MARKS_PER_UNATTEMPTED = 0;
 
     const totalMarks = (correct * MARKS_PER_CORRECT) + (incorrect * MARKS_PER_WRONG) + (unanswered * MARKS_PER_UNATTEMPTED);
     const maxMarks = quizData.questions.length * MARKS_PER_CORRECT;
-    const percentage = (totalMarks / maxMarks) * 100;
+    const percentage = maxMarks > 0 ? (totalMarks / maxMarks) * 100 : 0;
 
     return { correct, incorrect, unanswered, rawMarks: totalMarks, percentage };
   };
@@ -368,10 +426,10 @@ export default function QuickQuizPlayer() {
         {/* Score Card */}
         <Paper sx={{ p: 4, mb: 4, textAlign: 'center', borderRadius: 3 }}>
           <Typography variant="h3" fontWeight={700} gutterBottom>
-            {score.percentage.toFixed(1)}%
+            {score.percentage.toFixed(2)}%
           </Typography>
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            Marks: {score.rawMarks.toFixed(1)} / {(quizData.questions.length * 2).toFixed(1)}
+            Marks: {score.rawMarks.toFixed(2)} / {(quizData.questions.length * 2).toFixed(2)}
           </Typography>
           <Typography variant="h5" color="text.secondary" gutterBottom>
             {score.percentage >= 80 ? '🎉 Excellent!' : score.percentage >= 60 ? '👍 Good Job!' : '💪 Keep Practicing!'}
@@ -796,6 +854,15 @@ export default function QuickQuizPlayer() {
                 disabled={currentIndex === 0}
               >
                 Previous
+              </Button>
+
+              <Button
+                variant="outlined"
+                color="warning"
+                onClick={handleClearResponse}
+                disabled={!selectedAnswer}
+              >
+                Clear Response
               </Button>
 
               <Button variant="contained" color="error" onClick={() => setConfirmSubmit(true)}>

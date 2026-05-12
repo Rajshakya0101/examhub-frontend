@@ -234,11 +234,11 @@ const [showUpcomingFeatureModal, setShowUpcomingFeatureModal] = useState(false);
 
     return {
       totalAttempts: allAttempts.length,
-      avgScore: avgScore.toFixed(1),
+      avgScore: avgScore.toFixed(2),
       totalTime,
       totalCorrect,
       totalAttempted,
-      accuracy: totalAttempted > 0 ? ((totalCorrect / totalAttempted) * 100).toFixed(1) : '0',
+      accuracy: totalAttempted > 0 ? ((totalCorrect / totalAttempted) * 100).toFixed(2) : '0.00',
     };
   }, [allAttempts]);
 
@@ -375,7 +375,7 @@ const [showUpcomingFeatureModal, setShowUpcomingFeatureModal] = useState(false);
                   Overall Accuracy
                 </Typography>
                 <Typography variant="h4" sx={{ fontWeight: 700, color: theme.palette.info.main }}>
-                  {!userStatsLoading && userStatsSummary ? `${Number(userStatsSummary.accuracy).toFixed(1)}%` : '—'}
+                  {!userStatsLoading && userStatsSummary ? `${Number(userStatsSummary.accuracy).toFixed(2)}%` : '—'}
                 </Typography>
               </Paper>
             </Grid>
@@ -521,10 +521,10 @@ const [showUpcomingFeatureModal, setShowUpcomingFeatureModal] = useState(false);
                             <Grid item xs={6} sm={3}>
                               <Box sx={{ textAlign: 'center' }}>
                                 <Typography variant="h5" sx={{ fontWeight: 700, color: scoreColor + '.main' }}>
-                                  {raw != null ? `${raw}/${max}` : 'N/A'}
+                                  {raw != null ? `${Number(raw).toFixed(2)}/${Number(max).toFixed(2)}` : 'N/A'}
                                 </Typography>
                                 <Typography variant="caption" color="text.secondary">
-                                  {attempt.score?.percentage != null ? `${attempt.score.percentage.toFixed(1)}%` : scoreLabel}
+                                  {attempt.score?.percentage != null ? `${attempt.score.percentage.toFixed(2)}%` : scoreLabel}
                                 </Typography>
                               </Box>
                             </Grid>
@@ -592,7 +592,7 @@ const [showUpcomingFeatureModal, setShowUpcomingFeatureModal] = useState(false);
                           Accuracy: {(() => {
                             const attemptedCount = attempt.questionStats?.attempted ?? attempt.questionStats?.total ?? 0;
                             const accuracyPercent = attemptedCount > 0 ? (attempt.questionStats.correct / attemptedCount) * 100 : 0;
-                            return `${accuracyPercent.toFixed(1)}%`;
+                            return `${accuracyPercent.toFixed(2)}%`;
                           })()}
                         </Typography>
                       </Box>
@@ -660,7 +660,7 @@ const [showUpcomingFeatureModal, setShowUpcomingFeatureModal] = useState(false);
                     Score
                   </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 600, color: getScoreColor(selectedAttempt.score?.percentage || 0) + '.main' }}>
-                    {selectedAttempt.score?.percentage.toFixed(1)}%
+                    {selectedAttempt.score?.percentage.toFixed(2)}%
                   </Typography>
                 </Grid>
                 <Grid item xs={6}>

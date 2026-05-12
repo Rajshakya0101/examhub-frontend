@@ -399,6 +399,7 @@ export interface AttemptData {
   userId: string;
   examId: string;
   examTitle: string;
+  maxMarks?: number;
   testType?: 'quick-quiz' | 'quick-practice' | 'sectional-mock' | 'full-mock' | 'topic-wise-mock';
   status: 'completed' | 'abandoned';
   startedAt: Timestamp;
@@ -416,6 +417,32 @@ export interface AttemptData {
     incorrect: number;
     skipped: number;
   };
+  questionSnapshots?: Array<{
+    id: string;
+    section?: string;
+    subject?: string;
+    topic?: string;
+    stem?: string;
+    questionText?: string;
+    options?: string[];
+    optionA?: string;
+    optionB?: string;
+    optionC?: string;
+    optionD?: string;
+    correctIndex?: number;
+    correctOption?: string;
+    explanation?: string;
+  }>;
+  answers?: Array<{
+    questionId: string;
+    selectedIdx: number | null;
+    selectedOption?: string | null;
+    timeSpentMs?: number;
+  }> | Record<string, {
+    selectedIdx?: number | null;
+    selectedOption?: string | null;
+    timeSpentMs?: number;
+  }>;
 }
 
 /**

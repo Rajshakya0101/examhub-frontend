@@ -72,17 +72,59 @@ export default function QuestionCard({
           value={question.selectedIdx !== null ? question.selectedIdx : ''} 
           onChange={handleOptionChange}
         >
-          {question.options.map((option, idx) => (
-            <FormControlLabel
-              key={idx}
-              value={idx}
-              control={<Radio />}
-              label={option}
-              disabled={showAnswers}
-              className={`p-2 mb-1 rounded ${showAnswers && idx === question.correctIndex ? 'bg-success bg-opacity-10' : ''}`}
-            />
-          ))}
+          {question.options.map((option, idx) => {
+            const isSelected = question.selectedIdx === idx;
+            const isCorrectAnswer = question.correctIndex === idx;
+            const bgColor = showAnswers && isCorrectAnswer ? '#c8e6c9' : showAnswers && isSelected && !isCorrectAnswer ? '#ffccbc' : '';
+            const borderColor = showAnswers && isCorrectAnswer ? '#2e7d32' : showAnswers && isSelected && !isCorrectAnswer ? '#d84315' : '';
+            const borderWidth = showAnswers && (isCorrectAnswer || isSelected) ? '2px' : '1px';
+            
+            return (
+              <FormControlLabel
+                key={idx}
+                value={idx}
+                control={<Radio />}
+                label={option}
+                disabled={showAnswers}
+                sx={{
+                  p: 2,
+                  mb: 1,
+                  borderRadius: 1,
+                  backgroundColor: bgColor,
+                  border: `${borderWidth} solid ${borderColor}`,
+                  '&:hover': showAnswers ? {} : { backgroundColor: 'rgba(0,0,0,0.04)' }
+                }}
+              />
+            );
+          })}
         </RadioGroup>
+
+        {/* Show answer summary */}
+        {showAnswers && (
+          <Box sx={{ mt: 3, p: 2, backgroundColor: 'rgba(0,0,0,0.04)', borderRadius: 1 }}>
+            {question.selectedIdx !== null ? (
+              <>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  <strong>Your Answer:</strong> {question.options[question.selectedIdx]}
+                </Typography>
+                {question.selectedIdx !== question.correctIndex && (
+                  <Typography variant="body2" sx={{ color: 'success.main' }}>
+                    <strong>Correct Answer:</strong> {question.options[question.correctIndex!]}
+                  </Typography>
+                )}
+              </>
+            ) : (
+              <>
+                <Typography variant="body2" sx={{ color: 'warning.main' }}>
+                  <strong>You didn't answer this question</strong>
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'success.main', mt: 1 }}>
+                  <strong>Correct Answer:</strong> {question.options[question.correctIndex!]}
+                </Typography>
+              </>
+            )}
+          </Box>
+        )}
 
         {/* Show explanation if answers are revealed */}
         {showAnswers && question.explanation && (
