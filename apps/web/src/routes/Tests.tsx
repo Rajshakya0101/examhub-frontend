@@ -219,10 +219,11 @@ export default function Tests() {
   );
   const [ratedExams, setRatedExams] = useState<Record<string, number>>({});
   const [showPremiumAlert, setShowPremiumAlert] = useState(true);
+  const [showUpcomingFeatureModal, setShowUpcomingFeatureModal] = useState(false);
+  const [upcomingFeatureSource, setUpcomingFeatureSource] = useState<'start' | 'details' | 'upgrade'>('start');
 
   // Tabs for filtering exam types
   const tabs = [
-    { label: 'All Tests', icon: <SchoolIcon fontSize="small" /> },
     { label: 'Full Mock', icon: <PlayArrowIcon fontSize="small" /> },
     { label: 'Sectional', icon: <BarChartIcon fontSize="small" /> },
     { label: 'Topic-Wise', icon: <WorkspacePremiumIcon fontSize="small" /> }
@@ -297,10 +298,9 @@ export default function Tests() {
 
   // Filter exams based on active tab
   const filteredExams = exams.filter(exam => {
-    if (activeTab === 0) return true; // All tests
-    if (activeTab === 1) return exam.type === 'Mock Test'; // Full Mock
-    if (activeTab === 2) return exam.type === 'Sectional'; // Sectional
-    if (activeTab === 3) return exam.type === 'Topic-Wise'; // Topic-Wise
+    if (activeTab === 0) return exam.type === 'Mock Test'; // Full Mock
+    if (activeTab === 1) return exam.type === 'Sectional'; // Sectional
+    if (activeTab === 2) return exam.type === 'Topic-Wise'; // Topic-Wise
     return true;
   });
 
@@ -557,24 +557,10 @@ export default function Tests() {
     },
   });
 
-  // Start an exam - generate full mock test or sectional test
+  // Start an exam - Show upcoming feature modal
   const startExam = (examId: string) => {
-    const exam = exams.find(e => e.id === examId);
-    if (!exam) return;
-    
-    setTestError(null);
-    setGeneratingTestForExam(examId);
-    
-    // Check if it's a sectional test or full mock
-    if (exam.type === 'Sectional') {
-      generateSectionalMutation.mutate(exam);
-    } else if (exam.type === 'Mock Test') {
-      generateMockMutation.mutate(exam);
-    } else {
-      // For other types, just navigate (fallback)
-      setGeneratingTestForExam(null);
-      navigate(`/tests/${examId}`);
-    }
+    setUpcomingFeatureSource('start');
+    setShowUpcomingFeatureModal(true);
   };
 
   const handleConfirmStart = () => {
@@ -593,9 +579,16 @@ export default function Tests() {
     }
   };
 
-  // View exam details
+  // View exam details - Show upcoming feature modal
   const viewExamDetails = (examId: string) => {
-    navigate(`/tests/${examId}`);
+    setUpcomingFeatureSource('details');
+    setShowUpcomingFeatureModal(true);
+  };
+
+  // Handle upgrade now click - Show upcoming feature modal
+  const handleUpgradeNowClick = () => {
+    setUpcomingFeatureSource('upgrade');
+    setShowUpcomingFeatureModal(true);
   };
 
   return (
@@ -893,6 +886,7 @@ export default function Tests() {
                 color="info" 
                 size="small"
                 startIcon={<WorkspacePremiumIcon />}
+                onClick={handleUpgradeNowClick}
                 sx={{ fontWeight: 600 }}
               >
                 Upgrade Now
@@ -937,250 +931,14 @@ export default function Tests() {
           </Paper>
         </Box>
 
-        {/* Content based on active tab */}
+        {/* Content based on active tab - Full Mock selected by default */}
         {activeTab === 0 ? (
-          // AI Mock Tests - Show exam cards
-          isLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', my: 5 }}>
-              <CircularProgress size={60} />
-            </Box>
-          ) : filteredExams.length > 0 ? (
-            <Grid container spacing={3}>
-            {filteredExams.map(exam => {
-              const difficultyInfo = getDifficultyInfo(exam.difficulty, theme);
-              const testTypeInfo = getTestTypeInfo(exam.type, theme);
-              const isBookmarked = bookmarkedExams.includes(exam.id) || exam.isBookmarked;
-              const userRating = ratedExams[exam.id] || 0;
-              
-              return (
-                <Grid item xs={12} md={6} key={exam.id}>
-                  <Card sx={{ 
-                    borderRadius: 3,
-                    overflow: 'hidden',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    position: 'relative',
-                    boxShadow: theme.shadows[2],
-                    transition: 'transform 0.3s, box-shadow 0.3s',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: theme.shadows[8],
-                    }
-                  }}>
-                    {/* Top Color Bar */}
-                    <Box sx={{
-                      height: 6,
-                      width: '100%',
-                      bgcolor: exam.color || theme.palette.primary.main,
-                    }} />
-                    
-                    {/* Premium Badge */}
-                    {exam.isPremium && (
-                      <Box sx={{ 
-                        position: 'absolute', 
-                        top: 16, 
-                        right: 16, 
-                        zIndex: 2 
-                      }}>
-                        <Tooltip title="Premium Test">
-                          <Avatar 
-                            sx={{ 
-                              width: 32, 
-                              height: 32, 
-                              bgcolor: alpha(theme.palette.secondary.main, 0.9),
-                              boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-                            }}
-                          >
-                            <WorkspacePremiumIcon fontSize="small" />
-                          </Avatar>
-                        </Tooltip>
-                      </Box>
-                    )}
-                    
-                    <CardContent sx={{ p: 3, flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          <Avatar 
-                            sx={{ 
-                              bgcolor: testTypeInfo.bgColor,
-                              color: testTypeInfo.color,
-                              width: 40, 
-                              height: 40,
-                              mr: 1.5
-                            }}
-                          >
-                            {testTypeInfo.icon}
-                          </Avatar>
-                          <Box>
-                            <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'uppercase', fontWeight: 500 }}>
-                              {exam.category} • {exam.subcategory}
-                            </Typography>
-                            <Typography variant="h6" component="h2" sx={{ 
-                              fontWeight: 600,
-                              lineHeight: 1.3
-                            }}>
-                              {exam.title}
-                            </Typography>
-                          </Box>
-                        </Box>
-                        
-                        <IconButton 
-                          onClick={(e) => toggleBookmark(exam.id, e)}
-                          sx={{ mt: -0.5, ml: 0.5 }}
-                          color={isBookmarked ? "primary" : "default"}
-                          size="small"
-                        >
-                          {isBookmarked ? <BookmarkIcon /> : <BookmarkBorderIcon />}
-                        </IconButton>
-                      </Box>
-                      
-                      {/* Tags Row */}
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                        <Chip 
-                          size="small" 
-                          label={exam.difficulty} 
-                          sx={{ 
-                            bgcolor: difficultyInfo.bgColor,
-                            color: difficultyInfo.textColor,
-                            fontWeight: 500
-                          }}
-                          icon={difficultyInfo.icon}
-                        />
-                        
-                        <Chip 
-                          size="small" 
-                          label={`${exam.questions} Questions`} 
-                          variant="outlined"
-                          icon={<HelpIcon fontSize="small" />}
-                        />
-                        
-                        <Chip 
-                          size="small" 
-                          label={formatDuration(exam.duration)} 
-                          variant="outlined"
-                          icon={<TimerIcon fontSize="small" />}
-                        />
-                        
-                        {exam.isPopular && (
-                          <Chip 
-                            size="small" 
-                            label="Popular" 
-                            sx={{ 
-                              bgcolor: alpha(theme.palette.warning.main, 0.1),
-                              color: theme.palette.warning.main,
-                              fontWeight: 500
-                            }}
-                            icon={<LocalFireDepartmentIcon fontSize="small" sx={{ color: theme.palette.warning.main }} />}
-                          />
-                        )}
-                      </Box>
-                      
-                      {/* Exam description */}
-                      <Typography 
-                        variant="body2" 
-                        color="text.secondary" 
-                        sx={{ 
-                          mb: 3,
-                          minHeight: 40,
-                          display: '-webkit-box',
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: 'vertical',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {exam.description}
-                      </Typography>
-                      
-                      {/* Sections */}
-                      <Typography variant="body2" fontWeight="medium" gutterBottom>
-                        Sections:
-                      </Typography>
-                      <Stack direction="row" spacing={1} flexWrap="wrap">
-                        {exam.sections.map((section: any, index: number) => (
-                          <Chip
-                            key={index}
-                            label={`${section.name}`}
-                            size="small"
-                            variant="outlined"
-                            sx={{ 
-                              mb: 1, 
-                              borderRadius: 1,
-                              '& .MuiChip-label': {
-                                px: 1
-                              }
-                            }}
-                          />
-                        ))}
-                      </Stack>
-                    </CardContent>
-
-                    <Divider />
-
-                    <CardActions sx={{ justifyContent: 'space-between', p: 2 }}>
-                      <Button
-                        size="small"
-                        onClick={() => viewExamDetails(exam.id)}
-                        startIcon={<InfoIcon />}
-                        sx={{ fontWeight: 500 }}
-                      >
-                        View Details
-                      </Button>
-                      <Button
-                        variant="contained"
-                        size="medium"
-                        onClick={() => startExam(exam.id)}
-                        disabled={generatingTestForExam === exam.id}
-                        endIcon={generatingTestForExam === exam.id ? <CircularProgress size={20} color="inherit" /> : <PlayArrowIcon />}
-                        sx={{ 
-                          px: 3,
-                          bgcolor: exam.color || theme.palette.primary.main,
-                          '&:hover': {
-                            bgcolor: alpha(exam.color || theme.palette.primary.main, 0.9)
-                          }
-                        }}
-                      >
-                        {generatingTestForExam === exam.id ? 'Generating...' : 'Start Test'}
-                      </Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              );
-            })}
-          </Grid>
-        ) : (
-          <Paper sx={{ 
-            p: 5, 
-            textAlign: 'center',
-            borderRadius: 3,
-            boxShadow: theme.shadows[2],
-            bgcolor: alpha(theme.palette.background.paper, 0.8),
-            mt: 4
-          }}>
-            <Typography variant="h5" sx={{ mb: 2, fontWeight: 600 }}>
-              No tests found
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 500, mx: 'auto' }}>
-              No tests match your current filter. Try selecting a different category or check back later for new tests.
-            </Typography>
-            <Button 
-              variant="contained" 
-              size="large"
-              onClick={() => setActiveTab(0)}
-              sx={{ px: 4 }}
-            >
-              View All Tests
-            </Button>
-          </Paper>
-        )
-        ) : activeTab === 1 ? (
           // Full Mock component
           <FullMock />
-        ) : activeTab === 2 ? (
+        ) : activeTab === 1 ? (
           // Sectional component
           <SectionalMock />
-        ) : activeTab === 3 ? (
+        ) : activeTab === 2 ? (
           // Topic-Wise component
           <TopicWiseMock />
         ) : null}
@@ -1282,6 +1040,57 @@ export default function Tests() {
               endIcon={<PlayArrowIcon />}
             >
               Start Test
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Upcoming Feature Modal */}
+        <Dialog
+          open={showUpcomingFeatureModal}
+          onClose={() => setShowUpcomingFeatureModal(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ 
+            bgcolor: alpha(theme.palette.warning.main, 0.1), 
+            fontWeight: 600,
+            textAlign: 'center'
+          }}>
+            ⏳ Upcoming Feature
+          </DialogTitle>
+          <DialogContent sx={{ mt: 3, textAlign: 'center' }}>
+            <Box sx={{ mb: 2 }}>
+              <WorkspacePremiumIcon 
+                sx={{ 
+                  fontSize: 64, 
+                  color: theme.palette.warning.main,
+                  mb: 2
+                }} 
+              />
+            </Box>
+            <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+              Premium Features Under Development
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 3 }}>
+              We're working hard to bring you premium features and enhanced capabilities. Stay tuned for updates!
+            </Typography>
+            <Alert severity="info" icon={false} sx={{ 
+              bgcolor: alpha(theme.palette.info.main, 0.1),
+              border: `1px solid ${theme.palette.info.main}`
+            }}>
+              <Typography variant="body2">
+                Premium features including enhanced analytics, personalized study plans, and advanced exam simulations are coming soon.
+              </Typography>
+            </Alert>
+          </DialogContent>
+          <DialogActions sx={{ p: 3, justifyContent: 'center' }}>
+            <Button 
+              onClick={() => setShowUpcomingFeatureModal(false)} 
+              variant="contained"
+              size="large"
+              sx={{ px: 4 }}
+            >
+              Got It
             </Button>
           </DialogActions>
         </Dialog>

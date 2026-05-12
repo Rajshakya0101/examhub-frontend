@@ -48,6 +48,7 @@ import {
   Cancel as WrongIcon,
   Flag as SkipIcon,
   Refresh as RefreshIcon,
+  WorkspacePremium as WorkspacePremiumIcon,
 } from '@mui/icons-material';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
@@ -150,6 +151,7 @@ export default function AttemptedTests() {
   const [sortBy, setSortBy] = useState<'recent' | 'score' | 'subject'>('recent');
   const [selectedAttempt, setSelectedAttempt] = useState<DisplayAttempt | null>(null);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+const [showUpcomingFeatureModal, setShowUpcomingFeatureModal] = useState(false);
 
   // Fetch all attempts for the user
   const { data: allAttempts, isLoading, isFetching, refetch } = useQuery({
@@ -262,25 +264,7 @@ export default function AttemptedTests() {
   }, [latestAttemptForOverview]);
 
   const handleReAttempt = (attemptId: string, examId: string) => {
-    // Store reference to previous attempt
-    sessionStorage.setItem('previousAttemptId', attemptId);
-
-    // Route to the test based on type
-    const testType = getTestType(examId);
-    if (testType === 'quick-practice') {
-      // For quick practice, we need to regenerate or use a similar quiz
-      navigate('/quick-quiz');
-    } else if (testType === 'sectional-mock') {
-      navigate('/sectional-mock');
-    } else if (testType === 'full-mock') {
-      navigate('/full-mock');
-    }
-
-    notify({
-      type: 'info',
-      message: 'Preparing your re-attempt. You can start a new test now.',
-      duration: 3000,
-    });
+    setShowUpcomingFeatureModal(true);
   };
 
   const handleViewAnalysis = (attemptId: string) => {
@@ -776,6 +760,57 @@ export default function AttemptedTests() {
           )}
         </DialogActions>
       </Dialog>
+
+          {/* Upcoming Feature Modal */}
+          <Dialog
+            open={showUpcomingFeatureModal}
+            onClose={() => setShowUpcomingFeatureModal(false)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle sx={{ 
+              bgcolor: alpha(theme.palette.warning.main, 0.1), 
+              fontWeight: 600,
+              textAlign: 'center'
+            }}>
+              ⏳ Upcoming Feature
+            </DialogTitle>
+            <DialogContent sx={{ mt: 3, textAlign: 'center' }}>
+              <Box sx={{ mb: 2 }}>
+                <WorkspacePremiumIcon 
+                  sx={{ 
+                    fontSize: 64, 
+                    color: theme.palette.warning.main,
+                    mb: 2
+                  }} 
+                />
+              </Box>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                Premium Features Under Development
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 3 }}>
+                We're working hard to bring you premium features and enhanced capabilities. Stay tuned for updates!
+              </Typography>
+              <Alert severity="info" icon={false} sx={{ 
+                bgcolor: alpha(theme.palette.info.main, 0.1),
+                border: `1px solid ${theme.palette.info.main}`
+              }}>
+                <Typography variant="body2">
+                  Re-attempt functionality and advanced quiz management are coming soon as part of our premium features.
+                </Typography>
+              </Alert>
+            </DialogContent>
+            <DialogActions sx={{ p: 3, justifyContent: 'center' }}>
+              <Button 
+                onClick={() => setShowUpcomingFeatureModal(false)} 
+                variant="contained"
+                size="large"
+                sx={{ px: 4 }}
+              >
+                Got It
+              </Button>
+            </DialogActions>
+          </Dialog>
     </Box>
   );
 }
