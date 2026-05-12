@@ -342,8 +342,8 @@ export default function QuickQuizPlayer() {
         submittedAt: Timestamp.now(),
         timeSpentSec: timeSpentSec,
         score: {
-          raw: scoreData.rawMarks,
-          percentage: scoreData.percentage,
+          raw: Number(Number(scoreData.rawMarks).toFixed(2)),
+          percentage: Number(Number(scoreData.percentage).toFixed(2)),
         },
         maxMarks: quizData.questions.length * (isRRBNTPCExam(quizData) ? 1 : 2),
         questionStats: {
@@ -813,7 +813,7 @@ export default function QuickQuizPlayer() {
           <Grid item xs={12} md={9}>
             {/* Question Content */}
             <Paper sx={{ p: 4, mb: 3, borderRadius: 3 }}>
-              <Typography variant="h5" fontWeight={600} gutterBottom>
+              <Typography variant="h5" fontWeight={300} gutterBottom>
                 {currentQuestion?.questionText}
               </Typography>
 
